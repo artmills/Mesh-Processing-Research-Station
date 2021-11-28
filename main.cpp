@@ -1,0 +1,824 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <math.h>
+#include <vector>
+#include <cmath>
+#include <iostream>
+#include <algorithm>
+
+#include "glew.h"
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include "glut.h"
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/string_cast.hpp"
+
+#include "vertex.hpp"
+#include "meshcomponent.hpp"
+#include "loader.hpp"
+#include "basicshader.hpp"
+#include "shadowshader.hpp"
+#include "polyhedron.hpp"
+#include "meshanalysis.hpp"
+#include "subdivision.hpp"
+#include "meshfactory.hpp"
+#include "view.hpp"
+
+
+
+
+
+/********************************************************************************/
+/********************************************************************************/
+/********************************** USER INPUT **********************************/
+/********************************************************************************/
+/********************************************************************************/
+
+// Motion of the scene when rotating or zooming:
+const float rotationFactor = { 0.01f };
+const float scaleFactor = { 0.005f };
+const float minScaleFactor = { 0.008f };
+
+// Scroll wheel values:
+const int scrollWheelUp = { 3 };
+const int scrollWheelDown = { 4 };
+const float scrollWheelClickFactor = { 5.0f };
+
+// Mouse button values:
+const int leftMouseButton   = { 4 };
+const int middleMouseButton = { 2 };
+const int rightMouseButton  = { 1 };
+
+// User interface:
+const int windowWidth = 1280;
+const int windowHeight = 800;
+int	mainWindow; 
+int	activeMouseButton;
+float zoomScale;
+int	mouseX, mouseY;
+float rotationX, rotationY;
+
+
+
+
+
+/*********************************************************************************/
+/*********************************************************************************/
+/********************************** OPENGL/GLUT **********************************/
+/*********************************************************************************/
+/*********************************************************************************/
+void Animate();
+void Display();
+void DoMainMenu(int id);
+void InitGraphics();
+void InitLists();
+void InitMenus();
+void Keyboard(unsigned char c, int x, int y);
+void MouseButton(int button, int state, int x, int y);
+void MouseMotion(int x, int y);
+void Resize(int x, int y);
+void Visibility(int);
+void Reset();
+
+
+
+
+
+/*********************************************************************************/
+/*********************************************************************************/
+/************************************ FILE IO ************************************/
+/*********************************************************************************/
+/*********************************************************************************/
+unsigned char*	BmpToTexture( char *, int *, int * );
+int	ReadInt( FILE * );
+short ReadShort( FILE * );
+
+
+
+
+
+/**********************************************************************************/
+/**********************************************************************************/
+/*********************************** PROTOTYPES ***********************************/
+/**********************************************************************************/
+/**********************************************************************************/
+void InitializeShadows(int width, int height);
+
+
+
+
+/*********************************************************************************/
+/*********************************************************************************/
+/*********************************** VARIABLES ***********************************/
+/*********************************************************************************/
+/*********************************************************************************/
+
+// Objects to draw:
+MeshComponent mesh;
+std::vector<MeshComponent> meshes;
+
+// Shaders:
+BasicShader shader;
+ShadowShader shadowShader;
+
+// Perspective:
+glm::mat4 perspectiveMatrix;
+glm::mat4 lightPerspectiveMatrix;
+glm::mat4 viewMatrix;
+glm::mat4 modelViewProjectionMatrix;
+float near = 1.0f;
+float far = 100.0f;
+
+// View properties:
+View cameraView;
+glm::vec3 eyePosition;
+glm::vec3 eyeDirection;
+glm::vec3 lightPosition;
+glm::vec3 lightEye;
+bool viewFromSun = false;
+
+// Textures:
+GLuint textureHandle;
+
+// Lighting:
+const float AMBIENT = 1.0f;
+const float DIFFUSE = 0.0f;
+const float SPECULAR = 0.0f;
+/*
+const float AMBIENT = 0.6f;
+const float DIFFUSE = 0.3f;
+const float SPECULAR = 1 - AMBIENT - DIFFUSE;
+*/
+const float SHININESS = 10.0f;
+float ambient = AMBIENT;
+float diffuse = DIFFUSE;
+float specular = SPECULAR;
+float shininess = SHININESS;
+glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+
+// Animation:
+bool animate = true;
+float currentTime = 0;
+#define MS_IN_THE_ANIMATION_CYCLE 10000
+
+
+
+
+
+/*********************************************************************************/
+/*********************************************************************************/
+/*********************************** FUNCTIONS ***********************************/
+/*********************************************************************************/
+/*********************************************************************************/
+
+// main program:
+int main(int argc, char* argv[])
+{
+	// Initialize GLUT:
+	glutInit(&argc, argv);
+	std::cout << "***** INITIALIZED GLUT. *****" << std::endl;
+	std::cout << std::endl;
+
+	// Initialize graphics:
+	InitGraphics();
+	std::cout << "***** INITIALIZED LISTS. *****" << std::endl;
+	std::cout << std::endl;
+
+	// Initialize static items needed for rendering:
+	InitLists();
+	std::cout << "***** INITIALIZED LISTS. *****" << std::endl;
+	std::cout << std::endl;
+
+	// Set all variables to default values:
+	Reset();
+	std::cout << "***** INITIALIZED VARIABLES. *****" << std::endl;
+	std::cout << std::endl;
+
+	// Initialize menus:
+	InitMenus();
+	std::cout << "***** INITIALIZED MENUS. *****" << std::endl;
+	std::cout << std::endl;
+
+	std::cout << "***** GRAPHICS INITIALIZED. *****" << std::endl;
+	std::cout << std::endl;
+
+	// Begin drawing:
+	glutSetWindow( mainWindow );
+	glutMainLoop( );
+
+	return 0;
+}
+
+
+
+/*********************************************************************************/
+/*********************************************************************************/
+/*********************************** RENDERING ***********************************/
+/*********************************************************************************/
+/*********************************************************************************/
+
+// Initialize graphics properties.
+void InitGraphics()
+{
+	// Red-green-blue-alpha color, double-buffering, and z-buffering:
+	glutInitDisplayMode( GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH );
+
+	// Set the initial window configuration:
+	glutInitWindowPosition(0, 0);
+	glutInitWindowSize(windowWidth, windowHeight);
+
+	// Open the window and set its title:
+	mainWindow = glutCreateWindow("Computer Graphics Renderer");
+	glutSetWindowTitle("Computer Graphics Renderer");
+
+	// Set the framebuffer clear values:
+	glClearColor( 1, 1, 1, 1);
+
+	glutSetWindow( mainWindow );
+	glutDisplayFunc( Display );
+	glutReshapeFunc( Resize );
+	glutKeyboardFunc( Keyboard );
+	glutMouseFunc( MouseButton );
+	glutMotionFunc( MouseMotion );
+	glutPassiveMotionFunc( NULL );
+	glutVisibilityFunc( Visibility );
+	glutEntryFunc( NULL );
+	glutSpecialFunc( NULL );
+	glutSpaceballMotionFunc( NULL );
+	glutSpaceballRotateFunc( NULL );
+	glutSpaceballButtonFunc( NULL );
+	glutButtonBoxFunc( NULL );
+	glutDialsFunc( NULL );
+	glutTabletMotionFunc( NULL );
+	glutTabletButtonFunc( NULL );
+	glutMenuStateFunc( NULL );
+	glutTimerFunc( -1, NULL, 0 );
+	glutIdleFunc( Animate );
+
+	// Init glew (a window must be open to do this):
+	GLenum err = glewInit( );
+}
+
+
+void InitLists()
+{
+	// Perspective Matrices:
+	perspectiveMatrix = glm::perspective(glm::pi<float>() / 3.0f, (float)windowWidth / (float)windowHeight, near, far);
+	lightPerspectiveMatrix = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 500.0f);
+
+	// Test Shader:
+	shader = BasicShader();
+	shader.Initialize();	
+
+	// Shadow Shader:
+	shadowShader = ShadowShader();
+	shadowShader.Initialize();
+
+
+	Polyhedron* p = new Polyhedron("./tempmodels/sphere.ply");
+	p->Initialize();
+
+	/*
+	std::cout << "Getting corner list of p" << std::endl;
+	MeshAnalysis::GetCornerList(p);
+	std::cout << "Getting valence deficit of p" << std::endl;
+	MeshAnalysis::GetValenceDeficit(p);
+	std::cout << "Valence deficit of p is " << p->valenceDeficit << std::endl;
+	std::cout << "Getting angle deficit of p" << std::endl;
+	MeshAnalysis::GetAngleDeficit(p);
+	std::cout << "Angle deficit of p is " << p->angleDeficit << std::endl;
+	*/
+
+	int n = 0;
+	std::vector<Polyhedron*> loops;
+	Polyhedron* lp;
+	lp = p;
+	loops.push_back(lp);
+	for (int i = 0; i < n; ++i)
+	{
+		Polyhedron* q;
+		q = Subdivision::LoopSubdivisionHeap(loops[i]);
+		q->Initialize();
+		MeshAnalysis::GetCornerList(q);
+		MeshAnalysis::GetValenceDeficit(q);
+		MeshAnalysis::GetAngleDeficit(p);
+		loops.push_back(q);
+		delete(loops[i]);
+	}
+	std::vector<double> triangleHorizons = MeshAnalysis::GetHorizonMeasureLength(loops.back());
+	mesh = MeshComponent(loops.back(), triangleHorizons);
+	delete(loops.back());
+
+	// Color vertices according to the horizon measures.
+	/*
+	std::vector<Vertex>& vertices = mesh.getVertices();
+	std::vector<double> horizonMeasures = MeshAnalysis::ComputeHorizonMeasure(loops.back());
+	for (int i = 0; i < horizonMeasures.size(); ++i)
+	{
+		double x = horizonMeasures[i];
+		double colorFactor = sqrt(x);
+		//double colorFactor = cbrt(x);
+		//double colorFactor = x;
+		//double colorFactor = x * x;
+		vertices[i].r = 1;
+		//vertices[i].r = 1.0f;
+		vertices[i].g = 1.0f - colorFactor;
+		vertices[i].b = 1.0f - colorFactor;
+	}
+	*/
+	Loader::PrepareMesh(mesh);
+	meshes.push_back(mesh);
+	
+	/*
+	meshes = MeshFactory::GetSphere(1.0f, 100);
+	MeshAnalysis::HorizonMeasureLength(meshes);
+	for (int i = 0; i < meshes.size(); ++i)
+	{
+		Loader::PrepareMesh(meshes[i]);
+	}
+	*/
+
+
+	View cameraView;
+	cameraView.p = p;
+	cameraView.viewPosition = 2.0 * (p->radius + p->center);
+	cameraView.viewTarget = p->center;
+
+	eyePosition = (glm::vec3)cameraView.viewPosition;
+	eyeDirection = (glm::vec3)cameraView.viewTarget;
+
+	lightPosition = eyePosition;
+	lightEye = eyeDirection;
+
+}
+
+
+// Main loop: draw the scene.
+void Display()
+{
+
+	// Parameters for the window we will draw to:
+	glutSetWindow( mainWindow );
+	glDrawBuffer(GL_BACK);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+
+	/***** SCENE RENDERING *****/
+	
+	// Erase the background:
+	glViewport(0, 0, windowWidth, windowHeight);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+	// Camera:
+	glm::mat4 camera = glm::lookAt(eyePosition, eyeDirection, glm::vec3(0.0f, 1.0f, 0.0f));
+
+	
+	// Zoom the camera view:
+	if (zoomScale < minScaleFactor)
+	{
+		zoomScale = minScaleFactor;
+	}
+	glm::mat4 scale = glm::scale(glm::mat4(1), glm::vec3(zoomScale, zoomScale, zoomScale));
+
+	// Rotate the camera:
+	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
+	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
+
+	// Activate the shader:
+	shader.Start();
+
+	for (int i = 0; i < meshes.size(); ++i)
+	{
+		glBindVertexArray(meshes[i].getVAO());
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glEnableVertexAttribArray(2);
+		glEnableVertexAttribArray(3);
+		glEnableVertexAttribArray(4);
+
+		viewMatrix = camera * rotateY * rotateX * scale;
+		shader.LoadProjectionMatrix(perspectiveMatrix);
+		shader.LoadViewMatrix(viewMatrix);
+		shader.LoadTransformMatrix(meshes[i].transform);
+		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, eyePosition);
+		shader.LoadTexture(3);
+
+
+		// Draw calls:
+		glDrawElements(GL_TRIANGLES, meshes[i].getCount(), GL_UNSIGNED_INT, nullptr);
+	}
+
+	shader.Stop();
+
+
+	// Be sure the graphics buffer has been sent:
+	// Note: be sure to use glFlush( ) here, not glFinish( ) !
+	glutSwapBuffers( );
+	glFlush( );
+}
+
+
+// Call when GLUT has nothing else to do - good for animation parameters.
+void Animate()
+{
+	const int animationCycleMilliseconds = 10000;
+	int ms = glutGet(GLUT_ELAPSED_TIME); // In milliseconds.
+	ms %= MS_IN_THE_ANIMATION_CYCLE;
+	currentTime = (float)ms / (float)MS_IN_THE_ANIMATION_CYCLE; // [0, 1).
+
+	glutSetWindow( mainWindow );
+	glutPostRedisplay( );
+}
+
+
+
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+/*********************************** MENUS ***********************************/
+/*****************************************************************************/
+/*****************************************************************************/
+void DoMainMenu(int id)
+{
+	switch( id )
+	{
+		case 0:
+			Reset( );
+			break;
+
+		case 1:
+			// gracefully close out the graphics:
+			// gracefully close the graphics window:
+			// gracefully exit the program:
+			glutSetWindow( mainWindow );
+			glFinish( );
+			glutDestroyWindow( mainWindow );
+			exit( 0 );
+			break;
+
+		default:
+			fprintf( stderr, "Don't know what to do with Main Menu ID %d\n", id );
+	}
+
+	glutSetWindow( mainWindow );
+	glutPostRedisplay( );
+}
+
+void InitMenus()
+{
+	glutSetWindow(mainWindow);
+
+	int mainmenu = glutCreateMenu(DoMainMenu);
+	glutAddMenuEntry("Reset", 0);
+	glutAddMenuEntry("Quit", 1);
+
+	// Have the menu appear when the right mouse button is clicked.
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
+
+
+
+
+/**********************************************************************************/
+/**********************************************************************************/
+/*********************************** USER INPUT ***********************************/
+/**********************************************************************************/
+/**********************************************************************************/
+void Keyboard(unsigned char c, int x, int y)
+{
+	switch( c )
+	{
+		case 'a':
+			ambient == 0? ambient = AMBIENT : ambient = 0;
+			break;
+
+		case 'd':
+			diffuse == 0? diffuse = DIFFUSE : diffuse = 0;
+			break;
+
+		case 's': 
+			specular == 0? specular = SPECULAR : specular = 0;
+			break;
+
+		case 'v':
+			viewFromSun = !viewFromSun;
+			break;
+
+		case 'r':
+			Reset();
+			break;
+
+		case 'f':
+			animate = !animate;
+			if (animate)
+				glutIdleFunc(Animate);
+			else
+				glutIdleFunc(NULL);
+			break;
+
+		case 'q':
+			DoMainMenu(1);	// will not return here
+			break;				// happy compiler
+
+		default:
+			fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
+	}
+
+	// Force a call to Display( ):
+	glutSetWindow( mainWindow );
+	glutPostRedisplay( );
+}
+
+
+// When the mouse button transitions down or up:
+void MouseButton(int button, int state, int x, int y)
+{
+	int b = 0;			// LEFT, MIDDLE, or RIGHT
+
+	// Get the proper button bit mask:
+	switch( button )
+	{
+		case GLUT_LEFT_BUTTON:
+			b = leftMouseButton;		break;
+
+		case GLUT_MIDDLE_BUTTON:
+			b = middleMouseButton;		break;
+
+		case GLUT_RIGHT_BUTTON:
+			b = rightMouseButton;		break;
+
+		case scrollWheelUp:
+			zoomScale += minScaleFactor * scrollWheelClickFactor;
+			// keep object from turning inside-out or disappearing:
+			if (zoomScale < minScaleFactor)
+				zoomScale = minScaleFactor;
+			break;
+
+		case scrollWheelDown:
+			zoomScale -= minScaleFactor * scrollWheelClickFactor;
+			// keep object from turning inside-out or disappearing:
+			if (zoomScale < minScaleFactor)
+				zoomScale = minScaleFactor;
+			break;
+
+		default:
+			b = 0;
+			fprintf( stderr, "Unknown mouse button: %d\n", button );
+	}
+
+	// button down sets the bit, up clears the bit:
+
+	if( state == GLUT_DOWN )
+	{
+		mouseX = x;
+		mouseY = y;
+		activeMouseButton |= b;		// set the proper bit
+	}
+	else
+	{
+		activeMouseButton &= ~b;		// clear the proper bit
+	}
+
+	glutSetWindow(mainWindow);
+	glutPostRedisplay();
+
+}
+
+
+// When the mouse moves while a button is down:
+void MouseMotion(int x, int y)
+{
+	int dx = x - mouseX;		// change in mouse coords
+	int dy = y - mouseY;
+
+	if( ( activeMouseButton & leftMouseButton ) != 0 )
+	{
+		rotationX += ( rotationFactor*dy );
+		rotationY += ( rotationFactor*dx );
+	}
+
+
+	if( ( activeMouseButton & middleMouseButton ) != 0 )
+	{
+		zoomScale += minScaleFactor * (float) ( dx - dy );
+
+		// keep object from turning inside-out or disappearing:
+
+		if( zoomScale < minScaleFactor )
+			zoomScale = minScaleFactor;
+	}
+
+	mouseX = x;			// new current position
+	mouseY = y;
+
+	glutSetWindow( mainWindow );
+	glutPostRedisplay( );
+}
+
+
+// Set variables to default state: call this when the program starts!
+void Reset()
+{
+	activeMouseButton = 0;
+	zoomScale  = 1.0;
+	rotationX = rotationY = 0.;
+	ambient = AMBIENT;
+	diffuse = DIFFUSE;
+	specular = SPECULAR;
+}
+
+
+// When the window is resized.
+void Resize(int width, int height)
+{
+	// Don't really need to do anything since window size is checked each frame in Display().
+
+	glutSetWindow(mainWindow);
+	glutPostRedisplay();
+}
+
+
+// When the visibility of the window is changed.
+void Visibility(int state)
+{
+	if( state == GLUT_VISIBLE )
+	{
+		glutSetWindow( mainWindow );
+		glutPostRedisplay( );
+	}
+	else
+	{
+		// Could optimize by keeping track of the fact that the window is not visible and avoid animating/redrawing.
+	}
+}
+
+
+
+
+
+/*******************************************************************************/
+/*******************************************************************************/
+/*********************************** FILE IO ***********************************/
+/*******************************************************************************/
+/*******************************************************************************/
+void InitializeTexture(char* file, int width, int height)
+{
+	// Load a texture from file:
+	unsigned char* texture;
+	texture = BmpToTexture(file, &width, &height);
+
+	glGenTextures(1, &textureHandle);
+	glBindTexture(GL_TEXTURE_2D, textureHandle);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+}
+
+struct bmfh
+{
+	short bfType;
+	int bfSize;
+	short bfReserved1;
+	short bfReserved2;
+	int bfOffBits;
+} FileHeader;
+
+struct bmih
+{
+	int biSize;
+	int biWidth;
+	int biHeight;
+	short biPlanes;
+	short biBitCount;
+	int biCompression;
+	int biSizeImage;
+	int biXPelsPerMeter;
+	int biYPelsPerMeter;
+	int biClrUsed;
+	int biClrImportant;
+} InfoHeader;
+
+const int birgb = { 0 };
+
+// Read a BMP file into a Texture:
+unsigned char* BmpToTexture(char *filename, int* width, int* height)
+{
+	FILE *fp = fopen( filename, "rb" );
+	if( fp == NULL )
+	{
+		fprintf( stderr, "Cannot open Bmp file '%s'\n", filename );
+		return NULL;
+	}
+
+	FileHeader.bfType = ReadShort( fp );
+
+
+	// if bfType is not 0x4d42, the file is not a bmp:
+
+	if( FileHeader.bfType != 0x4d42 )
+	{
+		fprintf( stderr, "File '%s' is the wrong type of file: 0x%0x\n", filename, FileHeader.bfType );
+		fclose( fp );
+		return NULL;
+	}
+
+	FileHeader.bfSize = ReadInt( fp );
+	FileHeader.bfReserved1 = ReadShort( fp );
+	FileHeader.bfReserved2 = ReadShort( fp );
+	FileHeader.bfOffBits = ReadInt( fp );
+
+	InfoHeader.biSize = ReadInt( fp );
+	InfoHeader.biWidth = ReadInt( fp );
+	InfoHeader.biHeight = ReadInt( fp );
+
+	int nums = InfoHeader.biWidth;
+	int numt = InfoHeader.biHeight;
+
+	InfoHeader.biPlanes = ReadShort( fp );
+	InfoHeader.biBitCount = ReadShort( fp );
+	InfoHeader.biCompression = ReadInt( fp );
+	InfoHeader.biSizeImage = ReadInt( fp );
+	InfoHeader.biXPelsPerMeter = ReadInt( fp );
+	InfoHeader.biYPelsPerMeter = ReadInt( fp );
+	InfoHeader.biClrUsed = ReadInt( fp );
+	InfoHeader.biClrImportant = ReadInt( fp );
+
+	fprintf( stderr, "Image size in file '%s' is: %d x %d\n", filename, nums, numt );
+
+	unsigned char * texture = new unsigned char[ 3 * nums * numt ];
+	if( texture == NULL )
+	{
+		fprintf( stderr, "Cannot allocate the texture array!\b" );
+		return NULL;
+	}
+
+	// extra padding bytes:
+
+	int numextra =  4*(( (3*InfoHeader.biWidth)+3)/4) - 3*InfoHeader.biWidth;
+
+	// we do not support compression:
+
+	if( InfoHeader.biCompression != birgb )
+	{
+		fprintf( stderr, "Image file '%s' has the wrong type of image compression: %d\n", filename, InfoHeader.biCompression );
+		fclose( fp );
+		return NULL;
+	}
+
+	rewind( fp );
+	fseek( fp, 14+40, SEEK_SET );
+
+	if( InfoHeader.biBitCount == 24 )
+	{
+		unsigned char *tp = texture;
+		for( int t = 0; t < numt; t++ )
+		{
+			for( int s = 0; s < nums; s++, tp += 3 )
+			{
+				*(tp+2) = fgetc( fp );		// b
+				*(tp+1) = fgetc( fp );		// g
+				*(tp+0) = fgetc( fp );		// r
+			}
+
+			for( int e = 0; e < numextra; e++ )
+			{
+				fgetc( fp );
+			}
+		}
+	}
+
+	fclose( fp );
+
+	*width = nums;
+	*height = numt;
+	return texture;
+}
+
+int ReadInt(FILE* fp)
+{
+	unsigned char b3, b2, b1, b0;
+	b0 = fgetc( fp );
+	b1 = fgetc( fp );
+	b2 = fgetc( fp );
+	b3 = fgetc( fp );
+	return ( b3 << 24 )  |  ( b2 << 16 )  |  ( b1 << 8 )  |  b0;
+}
+
+short ReadShort(FILE* fp)
+{
+	unsigned char b1, b0;
+	b0 = fgetc( fp );
+	b1 = fgetc( fp );
+	return ( b1 << 8 )  |  b0;
+}

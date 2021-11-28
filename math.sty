@@ -1,0 +1,181 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{math}[2020/05/21]
+
+\ProcessOptions\relax
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{enumerate}
+\usepackage{hyperref}
+\usepackage[mathscr]{euscript}
+\usepackage{setspace}
+\usepackage{float}
+\usepackage{titling}
+\usepackage{atbegshi}% http://ctan.org/pkg/atbegshi
+%\AtBeginDocument{\AtBeginShipoutNext{\AtBeginShipoutDiscard}}
+
+% the parskip package apparently overrides parindent. fix that:
+\edef\restoreparindent{\parindent=\the\parindent\relax}
+\usepackage{parskip}
+\restoreparindent
+
+\addtolength{\oddsidemargin}{-.875in}
+\addtolength{\evensidemargin}{-.875in}
+\addtolength{\textwidth}{1.75in}
+
+\addtolength{\topmargin}{-.875in}
+\addtolength{\textheight}{1.75in}
+
+\pagenumbering{gobble}
+%\everymath={\displaystyle}
+\renewcommand{\labelitemii}{\textbullet}
+%\setlength{\parindent}{10ex}
+
+%%%%%%%%%%%%%%%%%%%% Convenience %%%%%%%%%%%%%%%%%%%%
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Zplus}{\mathbb{Z}^+}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\Qplus}{\mathbb{Q}^+}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Rplus}{\mathbb{R}^+}
+\newcommand{\C}{\mathbb{C}}
+\renewcommand{\H}{\mathbb{H}}
+\newcommand{\RP}{\mathbb{\R}\text{P}}
+\newcommand{\CP}{\mathbb{\C}\text{P}}
+\newcommand{\HP}{\mathbb{\H}\text{P}}
+
+\renewcommand{\L}{\mathscr{L}}
+\newcommand{\E}{\mathscr{E}}
+\newcommand{\M}{\mathscr{M}}
+\newcommand{\Mscr}{\mathscr{M}}
+\newcommand{\Nscr}{\mathscr{N}}
+
+\newcommand{\RN}[1]{%
+  \textup{\uppercase\expandafter{\romannumeral#1}}%
+}
+\newcommand{\one}{\RN{1}}
+\newcommand{\two}{\RN{2}}
+
+\newcommand{\T}[1]{\text{#1}}
+\renewcommand{\it}[1]{\textit{#1}}
+\newcommand{\andt}{\text{ and }}
+\newcommand{\ort}{\text{ or }}
+\newcommand{\ift}{\text{ if }}
+\newcommand{\sot}{\text{ so }}
+\newcommand{\otherwiset}{\text{ otherwise }}
+
+%%%%%%%%%%%%%%%%%%%% Calculus Notation %%%%%%%%%%%%%%%%%%%%
+\newcommand{\diff}[1]{\frac{d}{d#1}}
+\newcommand{\deriv}[2]{\frac{d#1}{d#2}}
+\newcommand{\pdiff}[1]{\frac{\partial}{\partial#1}}
+\newcommand{\pderiv}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\cderiv}[2]{\frac{D#1}{d#2}}
+\newcommand{\Lim}[1]{\underset{#1}{\lim}\ }
+\newcommand{\at}[1]{\Big|_{#1}}
+
+
+%%%%%%%%%%%%%%%%%%%% Formatting %%%%%%%%%%%%%%%%%%%%
+\newcommand{\Vind}{\vspace{10pt}}
+\newcommand{\Ind}{\hspace{30pt}}
+\newcommand{\EndProof}{\hfill $\square$\Vind \Vind}
+\newcommand{\Prop}{\Ind \textbf{Proposition. }}
+\newcommand{\Lemma}{\Ind \textbf{Lemma.}}
+\newcommand{\Corollary}{\Ind \textbf{Corollary.}}
+\newcommand{\Soln}{\Vind \Ind \textbf{Solution. }}
+\newcommand{\Introduction}{\Vind \Ind \textbf{Introduction. }}
+
+
+%%%%%%%%%%%%%%%%%%%% Local %%%%%%%%%%%%%%%%%%%%
+\newcommand{\z}{\overline{z}}
+\newcommand{\w}{\overline{w}}
+\newcommand{\Rank}{\text{rank}}
+\newcommand{\Null}{\text{null}}
+\newcommand{\Trace}{\text{tr}}
+\newcommand{\Ker}{\text{ker}}
+\newcommand{\st}{\hspace{4pt} | \hspace{4pt}}
+\newcommand{\Lcm}{\text{lcm}}
+\newcommand{\Hom}{\text{Hom}}
+\newcommand{\area}{\text{Area}}
+\newcommand{\Div}{\text{div}}
+\newcommand{\Curl}{\text{curl}}
+
+\newcommand{\open}{\subset^\T{o}}
+\newcommand{\closed}{\subset_\T{c}}
+
+\newcommand{\Choose}[2]{{{#1}\choose{#2}}}
+\newcommand{\Iso}{\approx}
+\newcommand{\Homotopic}{\simeq}
+\newcommand{\Equiv}{\sim}
+
+
+\DeclarePairedDelimiter\Floor{\lfloor}{\rfloor}
+\DeclarePairedDelimiter\Bigfloor{\Big\lfloor}{\Big\rfloor}
+\DeclarePairedDelimiter\Ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\BigCeil{\Big\lceil}{\Big\rceil}
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\DeclarePairedDelimiter\bigabs{\Big\lvert}{\Big\rvert}
+\DeclarePairedDelimiter\ip{\langle}{\rangle}
+\DeclarePairedDelimiter\bigip{\Big\langle}{\Big\rangle}
+\DeclarePairedDelimiter\set{\{}{\}}
+\DeclarePairedDelimiter\bigset{\Big\{}{\Big\}}
+
+
+\makeatletter
+\renewcommand*\env@matrix[1][*\c@MaxMatrixCols c]{%
+  \hskip -\arraycolsep
+  \let\@ifnextchar\new@ifnextchar
+  \array{#1}}
+\makeatother
+
+\catcode`\@=11
+\newdimen\cdsep
+\cdsep=3em
+
+\def\cdstrut{\vrule height .6\cdsep width 0pt depth .4\cdsep}
+\def\@cdstrut{{\advance\cdsep by 2em\cdstrut}}
+
+\def\arrow#1#2{
+  \ifx d#1 
+    \llap{$\scriptstyle#2$}\left\downarrow\cdstrut\right.\@cdstrut\fi
+  \ifx u#1 
+    \llap{$\scriptstyle#2$}\left\uparrow\cdstrut\right.\@cdstrut\fi
+  \ifx r#1 
+    \mathop{\hbox to \cdsep{\rightarrowfill}}\limits^{#2}\fi
+  \ifx l#1 
+    \mathop{\hbox to \cdsep{\leftarrowfill}}\limits^{#2}\fi
+}
+\catcode`\@=12
+
+\newenvironment{eqn}
+	{\begin{aligned}}
+	{\end{aligned}}
+\newenvironment{prob}[1]
+	{\textbf{#1}.}
+	{\Vind\Vind}
+
+
+%%%%%%%%%%% Cover Pages %%%%%%%%%%
+\setcounter{section}{0}
+\setcounter{subsection}{0}
+
+
+%%%%%%%%%%% AMS Theorem %%%%%%%%%%
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lem}{Lemma}[section]
+\newtheorem{cor}{Corollary}[section]
+\numberwithin{equation}{section}
+
+\theoremstyle{definition}
+\newtheorem{defn}{Definition}[section]
+
+%%%%%%%%%%% Personal %%%%%%%%%
+\newcommand{\intro}[3]{\noindent\textbf{#1} \hfill Arthur Mills\\\noindent #2 \hfill #3\\ \noindent\hrulefill}
+\newcommand{\head}[2]{\noindent\textbf{#1} \hfill Due: #2\\ \noindent\hrulefill}
+
+\title{Final Project Proposal}
+\author{Arthur Mills: millsar@oregonstate.edu}
+
+\endinput
