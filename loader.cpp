@@ -1,5 +1,7 @@
 #include "loader.hpp"
 
+
+
 // get a RawModel from a list of Vertices.
 void Loader::PrepareMesh(MeshComponent& mesh)
 {
@@ -12,7 +14,7 @@ void Loader::PrepareMesh(MeshComponent& mesh)
 	AttributeList_Triangles(mesh.getTriangles());
 
 	// store vertex data:
-	AttributeList_StoreData(mesh.getVertices());
+	mesh.setVBO(AttributeList_StoreData(mesh.getVertices()));
 
 	// unbind the VAO:
 	UnbindVAO();
@@ -43,7 +45,25 @@ void Loader::AttributeList_Triangles(std::vector<uint>& triangles)
 
 }
 
-void Loader::AttributeList_StoreData(std::vector<Vertex>& vertices) 
+void Loader::UpdateHighlight(uint vbo, uint v0, uint v1, uint v2, glm::vec4 color)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	uint vertexSize = sizeof(Vertex);
+	uint bytesToHighlightColor = 15 * sizeof(float);
+	uint highlightColorSize = 4 * sizeof(float);
+	std::vector<float> data = {color.r, color.g, color.b, color.a };
+
+	// First vertex:
+	glBufferSubData(GL_ARRAY_BUFFER, v0 * vertexSize + bytesToHighlightColor, highlightColorSize, &data[0]);
+	
+	// Second vertex:
+	glBufferSubData(GL_ARRAY_BUFFER, v1 * vertexSize + bytesToHighlightColor, highlightColorSize, &data[0]);
+	
+	// Third vertex:
+	glBufferSubData(GL_ARRAY_BUFFER, v2 * vertexSize + bytesToHighlightColor, highlightColorSize, &data[0]);
+}
+
+uint Loader::AttributeList_StoreData(std::vector<Vertex>& vertices) 
 {
 	uint vboID;
 	glGenBuffers(1, &vboID);
@@ -58,4 +78,7 @@ void Loader::AttributeList_StoreData(std::vector<Vertex>& vertices)
 	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexSize, (const void*)(7 * sizeof(float))); // normals 3D.
 	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, vertexSize, (const void*)(10 * sizeof(float))); // textures 2D.
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, vertexSize, (const void*)(12 * sizeof(float))); // barycentric 3D.
+	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, vertexSize, (const void*)(15 * sizeof(float))); // highlight color 4D.
+
+	return vboID;
 }

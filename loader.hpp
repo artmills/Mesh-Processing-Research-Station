@@ -22,6 +22,10 @@ public:
 	 * When an entity is created with a mesh, this function should be called on the mesh to register it to the GPU. */
 	static void PrepareMesh(MeshComponent& mesh);
 
+	/** Update the highlight color of the three vertices.
+	 * The arguments are the indices of the vertices in the vertex list. */
+	static void UpdateHighlight(uint vao, uint v0, uint v1, uint v2, glm::vec4 color);
+
 private:
 
 	// pass data to GPU:
@@ -49,7 +53,7 @@ private:
 	 * 1) Positions 3D.
 	 * 2) Colors 4D.
 	 * */
-	static void AttributeList_StoreData(std::vector<Vertex>& vertices);
+	static uint AttributeList_StoreData(std::vector<Vertex>& vertices);
 
 
 	Loader();

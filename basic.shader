@@ -6,6 +6,7 @@ in vec4 vColor;
 in vec3 vNormal;
 in vec2 vTexture;
 in vec3 vBarycentric;
+in vec4 vHighlight;
 
 out vec4 fColor;
 out vec3 fNormal;
@@ -14,6 +15,7 @@ out vec2 fTexture;
 out vec3 fToEye;
 out vec4 fLightSpace;
 out vec3 fBarycentric;
+out vec4 fHighlight;
 
 uniform mat4 uProjectionMatrix;
 uniform mat4 uViewMatrix;
@@ -39,6 +41,7 @@ void main()
 	fToLight = uLightPosition - vPosition.xyz;
 	fToEye = vec3(0., 0., 0.) - gl_Position.xyz;
 	fBarycentric = vBarycentric;
+	fHighlight = vHighlight;
 };
 
 #shader fragment
@@ -51,6 +54,7 @@ in vec2 fTexture;
 in vec3 fToEye;
 in vec4 fLightSpace;
 in vec3 fBarycentric;
+in vec4 fHighlight;
 
 uniform float uAmbient;
 uniform float uDiffuse;
@@ -67,16 +71,24 @@ void main()
 {
 	int WIREFRAME = uWireframe < 1 ? 1 : 0;
 
+	vec4 drawColor = (fHighlight.r > 0) ? fHighlight : fColor;
+	/*
+	if (fHighlight.r > 0)
+	{
+		fColor = fHighlight;
+	}
+	*/
+
 	// Normalize:
 	vec3 unitToLight = normalize(fToLight);
 	vec3 unitToEye = normalize(fToEye);
 
 	// Ambient:
-	vec3 ambient = uAmbient * fColor.xyz;
+	vec3 ambient = uAmbient * drawColor.xyz;
 
 	// Diffuse:
 	float d = max(dot(fNormal, unitToLight), 0);
-	vec3 diffuse = uDiffuse * d * fColor.xyz;
+	vec3 diffuse = uDiffuse * d * drawColor.xyz;
 
 	// Specular:
 	float s = 0;

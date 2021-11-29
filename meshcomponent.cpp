@@ -98,6 +98,7 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 			v.setColor(color.x, color.y, color.z, 1.0f);
 			v.setNormal((float)current->normal.x, (float)current->normal.y, (float)current->normal.z);
 			v.setTexture(0, 0);
+			v.setHighlightColor(glm::vec4(0, 1, 0, 1));
 
 			// Barycentric coordinate for wireframe shader.
 			glm::vec3 barycentric;
@@ -171,6 +172,10 @@ MeshComponent::MeshComponent(Polyhedron *p)
 	this->transform = glm::mat4(1);
 }
 
+uint MeshComponent::getVBO()
+{
+	return vboID;
+}
 uint MeshComponent::getVAO()
 {
 	return vaoID;
@@ -178,6 +183,10 @@ uint MeshComponent::getVAO()
 uint MeshComponent::getCount()
 {
 	return triangles.size();
+}
+void MeshComponent::setVBO(uint vboID)
+{
+	this->vboID = vboID;
 }
 void MeshComponent::setVAO(uint vaoID)
 {

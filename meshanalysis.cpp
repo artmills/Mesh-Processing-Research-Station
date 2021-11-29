@@ -34,23 +34,20 @@ double MeshAnalysis::GetHorizonArea(Triangle t)
 	glm::dvec3 cross12 = glm::cross(v1, v2);
 	double det12 = glm::length(cross12);
 	double angle12 = atan2(det12, d12);
+	double acute12 = std::min(angle12, (double)abs(M_PI - angle12));
 
 	glm::dvec3 cross23 = glm::cross(v2, v3);
 	double det23 = glm::length(cross23);
 	double angle23 = atan2(det23, d23);
+	double acute23 = std::min(angle23, (double)abs(M_PI - angle23));
 
 	glm::dvec3 cross31 = glm::cross(v3, v1);
 	double det31 = glm::length(cross31);
 	double angle31 = atan2(det31, d31);
+	double acute31 = std::min(angle31, (double)abs(M_PI - angle31));
 
-	/*
-	if (angle12 < 0 || angle23 < 0 || angle31 < 0)
-		std::cout << angle12 << " " << angle23 << " " << angle31 << std::endl;
-	*/
-	if (acos(d12) < 0 || acos(d23) < 0 || acos(d31) < 0)
-		std::cout << acos(d12) << " " << acos(d23) << " " << acos(d31) << std::endl;
-
-	return 2.0 * (angle12 + angle23 + angle31);
+	//return 2.0 * (angle12 + angle23 + angle31);
+	return 2.0 * (acute12 + acute23 + acute31);
 
 	/*
 	return 2.0 * (acos(d1) + acos(d2) + acos(d3));

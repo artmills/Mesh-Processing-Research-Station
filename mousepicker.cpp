@@ -17,6 +17,15 @@ void MousePicker::UpdateViewMatrix(glm::mat4& viewMatrix)
 
 glm::vec3 MousePicker::ComputeRay(glm::mat4& transformationMatrix)
 {
+	float mouseX = 2.0f * mouseCoordinates.x / displayWidth - 1.0f;
+	float mouseY = 2.0f * mouseCoordinates.y / displayHeight - 1.0f;
+
+	glm::mat4 inverseVP = glm::inverse(projectionMatrix * viewMatrix);
+	glm::vec4 screenPosition = glm::vec4(mouseX, -mouseY, 1.0f, 1.0f);
+	glm::vec4 worldPosition = inverseVP * screenPosition;
+	glm::vec3 direction = glm::normalize(glm::vec3(worldPosition));
+	return direction;
+	/*
 	// Viewport -> Normalized Device Coordinates:
 	glm::vec2 ndc = getNormalizedDeviceCoordinates(mouseCoordinates.x, mouseCoordinates.y);
 
@@ -29,15 +38,8 @@ glm::vec3 MousePicker::ComputeRay(glm::mat4& transformationMatrix)
 	// Eye Space -> World Space:
 	glm::vec4 worldSpace = glm::vec4(getWorldCoordinates(eyeCoordinates), 1.0f);
 
-	// World Space -> Local Space:
-	/*
-	glm::mat4 inverseTransform = glm::inverse(transformationMatrix);
-	glm::vec4 local = inverseTransform * worldSpace;
-
-	return glm::vec3(local.x, local.y, local.z);
-	*/
 	return glm::vec3(worldSpace.x, worldSpace.y, worldSpace.z);
-
+	*/
 }
 glm::vec3 MousePicker::getRay()
 {

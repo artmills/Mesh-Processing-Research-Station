@@ -15,6 +15,7 @@
  * 3) vec3 vNormal
  * 4) vec2 vTexture
  * 5) vec3 vBarycentric
+ * 6) vec4 vHighlight
  *
  * and the following uniforms:
  *
@@ -112,6 +113,7 @@ protected:
 	 * 3) 2 -> vNormal.
 	 * 4) 3 -> vTexture.
 	 * 5) 4 -> vBarycentric.
+	 * 6) 5 -> vHighlight.
 	 */
 	void BindAttributes();
 

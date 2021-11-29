@@ -11,7 +11,9 @@
  * 2) 4D Color (RGBA).
  * 3) 3D Normals.
  * 4) 2D Textures.
- *
+ * 5) 3D Barycentric coordinates.
+ * 6) 4D Highlight color.
+ * *
  * These vertices are arranged into triangles to form meshes. */
 struct Vertex
 {
@@ -43,6 +45,9 @@ public:
 	/** Set the barycentric coordinate of this vertex. **/
 	void setBarycentricCoordinate(glm::vec3 b);
 
+	/** Set the highlight color of this vertex. **/
+	void setHighlightColor(glm::vec4 color);
+
 	/** Get the position of this vertex. **/
 	glm::vec3 getPosition();
 
@@ -63,6 +68,9 @@ public:
 
 	/* 3D Barycentric Coordinate. */
 	float b1, b2, b3;
+
+	/* 4D Highlight Color. */
+	float h1, h2, h3, h4;
 
 	/** Debug print. This really shouldn't be here. */
 	void PrintPosition();

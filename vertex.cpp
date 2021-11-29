@@ -14,6 +14,14 @@ Vertex::Vertex(float _x, float _y, float _z, glm::vec4 color)
 	this->a = color.a;
 }
 
+void Vertex::setHighlightColor(glm::vec4 color)
+{
+	this->h1 = color.r;
+	this->h2 = color.g;
+	this->h3 = color.b;
+	this->h4 = color.a;
+}
+
 void Vertex::setBarycentricCoordinate(glm::vec3 b)
 {
 	this->b1 = b.x;

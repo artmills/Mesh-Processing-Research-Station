@@ -22,6 +22,7 @@ void BasicShader::BindAttributes()
 	BindAttribute(2, "vNormal");
 	BindAttribute(3, "vTexture");
 	BindAttribute(4, "vBarycentric");
+	BindAttribute(5, "vHighlight");
 }
 
 // get uniform locations so uniforms can be bound to the correct shader variables.

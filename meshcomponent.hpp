@@ -13,6 +13,7 @@ class Polyhedron;
 // * model vertices.
 // * triangle configuration .
 // * vaoID.
+// * vboID: for the vertex data.
 // * model transform.
 class MeshComponent
 {
@@ -29,8 +30,10 @@ public:
 
 	// getters/setters:
 	uint getVAO();
+	uint getVBO();
 	uint getCount();
 	void setVAO(uint vaoID);
+	void setVBO(uint vboID);
 
 	std::vector<Vertex>& getVertices();
 	std::vector<uint>& getTriangles();
@@ -49,5 +52,6 @@ private:
 
 	// OpenGL rendering data:
 	uint vaoID;
+	uint vboID; // Vertex data VBO.
 
 };

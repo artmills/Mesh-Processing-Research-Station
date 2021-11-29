@@ -3,6 +3,7 @@
 #include "view.hpp"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/string_cast.hpp"
 
 /** Cast a ray from the camera into the scene at the point where the mouse is clicked. **/
 class MousePicker

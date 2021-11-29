@@ -1,3 +1,4 @@
+#include <limits>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -27,6 +28,7 @@
 #include "meshfactory.hpp"
 #include "view.hpp"
 #include "mousepicker.hpp"
+#include "camera.hpp"
 
 
 
@@ -140,6 +142,7 @@ glm::vec3 eyeDirection;
 glm::vec3 lightPosition;
 glm::vec3 lightEye;
 bool viewFromSun = false;
+Camera camera;
 
 // Textures:
 GLuint textureHandle;
@@ -168,8 +171,8 @@ bool animate = true;
 float currentTime = 0;
 #define MS_IN_THE_ANIMATION_CYCLE 10000
 
-
-
+// User input:
+bool selectTriangle = false;
 
 
 /*********************************************************************************/
@@ -183,6 +186,7 @@ int main(int argc, char* argv[])
 {
 	// Initialize GLUT:
 	glutInit(&argc, argv);
+	glutSetKeyRepeat(GLUT_KEY_REPEAT_OFF);
 	std::cout << "***** INITIALIZED GLUT. *****" << std::endl;
 	std::cout << std::endl;
 
@@ -302,7 +306,7 @@ void InitLists()
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
 
-	Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
+	Polyhedron* p = new Polyhedron("./tempmodels/sphere.ply");
 	p->Initialize();
 
 	View cameraView;
@@ -316,6 +320,9 @@ void InitLists()
 
 	eyePosition = (glm::vec3)cameraView.viewPosition;
 	eyeDirection = (glm::vec3)cameraView.viewTarget;
+
+	camera.position = eyePosition;
+	camera.pitch = 0;
 
 	lightPosition = eyePosition;
 	lightEye = eyeDirection;
@@ -367,7 +374,6 @@ void InitLists()
 // Main loop: draw the scene.
 void Display()
 {
-
 	// Parameters for the window we will draw to:
 	glutSetWindow( mainWindow );
 	glDrawBuffer(GL_BACK);
@@ -386,16 +392,11 @@ void Display()
 
 	// Camera:
 	glm::mat4 camera = glm::lookAt(eyePosition, eyeDirection, glm::vec3(0.0f, 1.0f, 0.0f));
-
-	
-	// Zoom the camera view:
 	if (zoomScale < minScaleFactor)
 	{
 		zoomScale = minScaleFactor;
 	}
 	glm::mat4 scale = glm::scale(glm::mat4(1), glm::vec3(zoomScale, zoomScale, zoomScale));
-
-	// Rotate the camera:
 	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
 	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
 	viewMatrix = camera * rotateY * rotateX * scale;
@@ -415,6 +416,7 @@ void Display()
 		glEnableVertexAttribArray(2);
 		glEnableVertexAttribArray(3);
 		glEnableVertexAttribArray(4);
+		glEnableVertexAttribArray(5);
 
 		shader.LoadProjectionMatrix(perspectiveMatrix);
 		shader.LoadViewMatrix(viewMatrix);
@@ -551,6 +553,14 @@ void Keyboard(unsigned char c, int x, int y)
 			DoMainMenu(1);	// will not return here
 			break;				// happy compiler
 
+		case 't':
+			selectTriangle = !selectTriangle;
+			if (selectTriangle)
+				std::cout << "Select tool active. " << std::endl;
+			else
+				std::cout << "Select tool off." << std::endl;
+			break;
+
 		default:
 			fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
 	}
@@ -560,11 +570,33 @@ void Keyboard(unsigned char c, int x, int y)
 	glutPostRedisplay( );
 }
 
+void SetHighlight(uint meshID, uint triangleIndex, glm::vec4 color)
+{
+	MeshComponent& mesh = meshes[meshID];
+	uint v0 = mesh.getTriangles()[triangleIndex + 0];
+	uint v1 = mesh.getTriangles()[triangleIndex + 1];
+	uint v2 = mesh.getTriangles()[triangleIndex + 2];
+	std::cout << "Vertices selected at " << v0 << " " << v1 << " " << v2 << std::endl;
+	Loader::UpdateHighlight(mesh.getVBO(), v0, v1, v2, color);
+}
+
 void MouseRayTriangleIntersection(glm::vec3& ray)
 {
+	// We have to make sure that the ray starts in the right place: bring the starting point of the ray to the correct camera point.
+	glm::mat4 scale = glm::scale(glm::mat4(1), glm::vec3(zoomScale, zoomScale, zoomScale));
+	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
+	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::vec4 cameraEyePosition = glm::vec4(eyePosition.x, eyePosition.y, eyePosition.z, 1);
+	cameraEyePosition = glm::inverse(scale) * glm::inverse(rotateX) * glm::inverse(rotateY) * cameraEyePosition;
+	glm::vec3 eyePos = glm::vec4(cameraEyePosition);
+
 	// Check if the ray intersects any triangle from any mesh.
-	int count = 0;
-	for (MeshComponent& mesh : meshes)
+	int meshIndex = -1;
+	int index = -1;
+	glm::vec2 position;
+	float distance;
+	float min = std::numeric_limits<float>::max();
+	for (int j = 0; j < meshes.size(); ++j)
 	{
 		std::vector<uint>& triangles = mesh.getTriangles();
 		std::vector<Vertex>& vertices = mesh.getVertices();
@@ -575,14 +607,29 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 			glm::vec3 v1 = vertices[triangles[i + 1]].getPosition();
 			glm::vec3 v2 = vertices[triangles[i + 2]].getPosition();
 
-			glm::vec2 position;
-			float distance;
-			bool intersection = glm::intersectRayTriangle(eyePosition, ray, v0, v1, v2, position, distance);
+			bool intersection = glm::intersectRayTriangle(eyePos, ray, v0, v1, v2, position, distance);
 			if (intersection)
-				++count;
+			{
+				// Identify the closest intersection.
+				if (distance < min)
+				{
+					meshIndex = j;
+					index = i;
+					min = distance;
+				}
+			}
 		}
 	}
-	std::cout << "Number of intersections: " << count << std::endl;
+	if (index == -1)
+	{
+		std::cout << "No intersection found. " << std::endl;
+	}
+	else
+	{
+		std::cout << "Intersection with triangle at index " << index << std::endl;
+		std::cout << "Highlighting mesh " << meshIndex << std::endl;
+		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
+	}
 }
 
 
@@ -636,11 +683,13 @@ void MouseButton(int button, int state, int x, int y)
 	}
 
 	// Update the mouse picker only on a LEFT CLICK... or else lag everything to death when zooming in/out.
-	if (b == leftMouseButton)
+	// Also, only do this while holding down the selectTriangle key (currently set to T).
+	if (selectTriangle && b == leftMouseButton && state == GLUT_DOWN)
 	{
 		mousePicker.setMouseCoordinates(x, y);
 		glm::vec3 ray = mousePicker.ComputeRay(meshes[0].transform);
-		std::cout << x << " " << y << "--> " << ray.x << " " << ray.y << " " << ray.z << ": " << glm::length(ray) << std::endl;
+		mousePicker.UpdateViewMatrix(viewMatrix);
+		//std::cout << x << " " << y << "--> " << ray.x << " " << ray.y << " " << ray.z << std::endl;
 		MouseRayTriangleIntersection(ray);
 	}
 
