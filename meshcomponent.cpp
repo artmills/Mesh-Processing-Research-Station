@@ -16,6 +16,7 @@ double MeshComponent::InverseLerp(double start, double end, double v)
 	return (v - start) / (end  - start);
 }
 
+// Triangle-based mesh.
 MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon)
 {
 	// Go through the Polyhedron's vlist and tlist and convert them to the correct data.
@@ -65,10 +66,9 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 		double percent = InverseLerp(min, max, distFromMean);
 		percent = cbrt(percent);
 
-		color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
+		//color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
 		
 
-		/*
 		// Within half a std: green.
 		if ((distFromMean < mean + 0.5*standardDeviation) && (distFromMean > mean - 0.5*standardDeviation))
 			color = glm::vec3(0.0f, 1.0f - (distFromMean / mean), 0.0f);
@@ -87,7 +87,6 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 			color = glm::vec3(1.0f, 0.0f, 0.0f);
 			++divergeCount;
 		}
-		*/
 
 		// Vertices:
 		for (int j = 0; j < 3; ++j)
@@ -136,6 +135,8 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 	this->triangles = triangles;
 	this->transform = glm::mat4(1);
 }
+
+// Blind copy.
 MeshComponent::MeshComponent(Polyhedron *p)
 {
 	// Go through the Polyhedron's vlist and tlist and convert them to the correct data.

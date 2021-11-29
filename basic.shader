@@ -58,34 +58,15 @@ uniform float uSpecular;
 uniform float uShininess;
 uniform vec3 uSpecularColor;
 
-uniform sampler2D uShadowMap;
-const float BIAS = 0.01;
-
-uniform sampler2D uTexture;
-
-const float THICKNESS = 0.001;
+uniform int uWireframe;
+const float THICKNESS = 0.005;
 
 out vec4 color;
 
-bool IsInShadow(vec4 lightSpace)
-{
-	// Convert from light space to shadowmap space:
-	vec3 projection = lightSpace.xyz / lightSpace.w;
-	projection = 0.5 * projection + 0.5;
-
-	// Closest depth from the light's perspective in the shadow map.
-	float nearestDepth = texture(uShadowMap, projection.xy).r;	
-
-	// Depth of the current fragment.
-	float currentDepth = projection.z;
-	
-	// Now do the check:
-	bool isInShadow = (currentDepth - BIAS) > nearestDepth;
-	return isInShadow;
-}
-
 void main()
 {
+	int WIREFRAME = uWireframe < 1 ? 1 : 0;
+
 	// Normalize:
 	vec3 unitToLight = normalize(fToLight);
 	vec3 unitToEye = normalize(fToEye);
@@ -95,12 +76,7 @@ void main()
 
 	// Diffuse:
 	float d = max(dot(fNormal, unitToLight), 0);
-	float shadowFactor = 1.0;
-	if (IsInShadow(fLightSpace))
-	{
-		shadowFactor = 0.1;	
-	}
-	vec3 diffuse = uDiffuse * d * shadowFactor * fColor.xyz;
+	vec3 diffuse = uDiffuse * d * fColor.xyz;
 
 	// Specular:
 	float s = 0;
@@ -111,14 +87,13 @@ void main()
 	}
 	vec3 specular = uSpecular * s * uSpecularColor;
 
-	color = fColor;
-
 	float closestEdge = min(fBarycentric.x, min(fBarycentric.y, fBarycentric.z));
 	float width = fwidth(closestEdge);
-	float edge = smoothstep(THICKNESS, THICKNESS + width, closestEdge);
+	float edge = max(WIREFRAME, smoothstep(THICKNESS, THICKNESS + width, closestEdge));
+	//float edge = smoothstep(THICKNESS, THICKNESS + width, closestEdge);
+	vec3 edgeVec = vec3(edge);
 
-	//color = vec4(edge, edge, edge, 1);
-
-	//color = vec4(ambient + diffuse + specular, 1);
-	color = vec4(edge * vec3(ambient + diffuse + specular), 1);
+	color = vec4(min(edgeVec, vec3(ambient + diffuse + specular)), 1);
+	//color = vec4(edge * vec3(ambient + diffuse + specular), 1);
+	//color = vec4(ambient + specular + diffuse, 1);
 };

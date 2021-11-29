@@ -49,6 +49,8 @@ void BasicShader::GetAllUniformLocations()
 	locationLightPerspective = GetUniformLocation("uLightPerspectiveMatrix");
 	locationShadowMap = GetUniformLocation("uShadowMap");
 	locationTexture = GetUniformLocation("uTexture");
+
+	locationWireframe = GetUniformLocation("uWireframe");
 }
 
 // only need one matrix: modelViewProjection = model * view * projection.
@@ -98,6 +100,13 @@ void BasicShader::LoadTexture(int unit)
 {
 	LoadUniform(locationTexture, unit);
 }
+
+void BasicShader::LoadWireframe(bool enableWireframe)
+{
+	int wireframe = enableWireframe ? 1 : 0;
+	LoadUniform(locationWireframe, wireframe);
+}
+
 
 std::string BasicShader::shaderFile;
 

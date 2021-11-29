@@ -19,11 +19,13 @@ class MeshComponent
 public:
 
 	MeshComponent();
+
+	// Blind copies: direct copy information into a MeshComponent.
+	MeshComponent(std::vector<Vertex> vertices, std::vector<uint> triangles);
 	MeshComponent(Polyhedron* p);
 
 	// Triangle-based: duplicate vertices to allow for per-triangle color.
 	MeshComponent(Polyhedron* p, std::vector<double>& triangleHorizon);
-	MeshComponent(std::vector<Vertex> vertices, std::vector<uint> triangles);
 
 	// getters/setters:
 	uint getVAO();

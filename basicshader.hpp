@@ -28,6 +28,7 @@
  * 8) vec3 uEyePosition
  * 10) mat4 uLightViewMatrix
  * 11) mat4 uLightPerspectiveMatrix
+ * 12) int uWireframe
  */
 class BasicShader : public ShaderProgram
 {
@@ -64,6 +65,9 @@ public:
 	/** Load texture. */
 	void LoadTexture(int unit);
 
+	/** Load wireframe. */
+	void LoadWireframe(bool enableWireframe);
+
 
 private:
 
@@ -93,6 +97,9 @@ private:
 	/** ID of the texture-related uniforms. */
 	uint locationTexture;
 
+	/** ID of the uniforms for rendering effects. */
+	uint locationWireframe;
+
 	/** Debug print method. This really shouldn't be here. */
 	void PrintRowMajor(glm::mat4& matrix);
 
@@ -115,6 +122,7 @@ protected:
 	 * 2) View matrix.
 	 * 3) Model transform matrix.
 	 * 4) All five lighting-related uniforms.
+	 * 5) Wireframe.
 	 */
 	void GetAllUniformLocations();
 

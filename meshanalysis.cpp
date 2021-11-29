@@ -27,16 +27,36 @@ double MeshAnalysis::GetHorizonArea(Triangle t)
 	glm::dvec3 v2 = t.vertices[1]->normal;
 	glm::dvec3 v3 = t.vertices[2]->normal;
 
-	double d1 = std::clamp(glm::dot(v2, v3), -1.0, 1.0);
-	double d2 = std::clamp(glm::dot(v1, v3), -1.0, 1.0);
-	double d3 = std::clamp(glm::dot(v1, v2), -1.0, 1.0);
+	double d12 = std::clamp(glm::dot(v1, v2), -1.0, 1.0);
+	double d23 = std::clamp(glm::dot(v2, v3), -1.0, 1.0);
+	double d31 = std::clamp(glm::dot(v3, v1), -1.0, 1.0);
 
-	double s = 2.0 * (acos(d1) + acos(d2) + acos(d3)); 
-	if (s != s)
-	{
-		std::cout << d1 << " " << d2 << " " << d3 << " " << acos(d1) << " " << acos(d2) << " " << acos(d3) << std::endl;
-	}
+	glm::dvec3 cross12 = glm::cross(v1, v2);
+	double det12 = glm::length(cross12);
+	double angle12 = atan2(det12, d12);
+
+	glm::dvec3 cross23 = glm::cross(v2, v3);
+	double det23 = glm::length(cross23);
+	double angle23 = atan2(det23, d23);
+
+	glm::dvec3 cross31 = glm::cross(v3, v1);
+	double det31 = glm::length(cross31);
+	double angle31 = atan2(det31, d31);
+
+	/*
+	if (angle12 < 0 || angle23 < 0 || angle31 < 0)
+		std::cout << angle12 << " " << angle23 << " " << angle31 << std::endl;
+	*/
+	if (acos(d12) < 0 || acos(d23) < 0 || acos(d31) < 0)
+		std::cout << acos(d12) << " " << acos(d23) << " " << acos(d31) << std::endl;
+
+	return 2.0 * (angle12 + angle23 + angle31);
+
+	/*
 	return 2.0 * (acos(d1) + acos(d2) + acos(d3));
+	*/
+
+
 }
 
 std::vector<double> MeshAnalysis::GetHorizonMeasureLength(Polyhedron* p)

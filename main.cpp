@@ -14,6 +14,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
+#include "glm/gtx/intersect.hpp"
 
 #include "vertex.hpp"
 #include "meshcomponent.hpp"
@@ -25,6 +26,7 @@
 #include "subdivision.hpp"
 #include "meshfactory.hpp"
 #include "view.hpp"
+#include "mousepicker.hpp"
 
 
 
@@ -59,7 +61,7 @@ int	activeMouseButton;
 float zoomScale;
 int	mouseX, mouseY;
 float rotationX, rotationY;
-
+MousePicker mousePicker;
 
 
 
@@ -128,7 +130,7 @@ glm::mat4 perspectiveMatrix;
 glm::mat4 lightPerspectiveMatrix;
 glm::mat4 viewMatrix;
 glm::mat4 modelViewProjectionMatrix;
-float near = 1.0f;
+float near = 0.1f;
 float far = 100.0f;
 
 // View properties:
@@ -157,6 +159,9 @@ float diffuse = DIFFUSE;
 float specular = SPECULAR;
 float shininess = SHININESS;
 glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+
+// Rendering effects:
+bool enableWireframe = false;
 
 // Animation:
 bool animate = true;
@@ -261,6 +266,23 @@ void InitGraphics()
 	GLenum err = glewInit( );
 }
 
+Polyhedron* SubdivideMesh(Polyhedron* p, int n)
+{
+	std::vector<Polyhedron*> loops;
+	Polyhedron* lp;
+	lp = p;
+	loops.push_back(lp);
+	for (int i = 0; i < n; ++i)
+	{
+		Polyhedron* q;
+		q = Subdivision::LoopSubdivisionHeap(loops[i]);
+		q->Initialize();
+		loops.push_back(q);
+		delete(loops[i]);
+	}
+	return loops.back();
+}
+
 
 void InitLists()
 {
@@ -276,58 +298,57 @@ void InitLists()
 	shadowShader = ShadowShader();
 	shadowShader.Initialize();
 
+	// Mouse picker:
+	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
-	Polyhedron* p = new Polyhedron("./tempmodels/sphere.ply");
+
+	Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
 	p->Initialize();
 
+	View cameraView;
+	cameraView.p = p;
 	/*
-	std::cout << "Getting corner list of p" << std::endl;
-	MeshAnalysis::GetCornerList(p);
-	std::cout << "Getting valence deficit of p" << std::endl;
-	MeshAnalysis::GetValenceDeficit(p);
-	std::cout << "Valence deficit of p is " << p->valenceDeficit << std::endl;
-	std::cout << "Getting angle deficit of p" << std::endl;
-	MeshAnalysis::GetAngleDeficit(p);
-	std::cout << "Angle deficit of p is " << p->angleDeficit << std::endl;
+	cameraView.viewPosition = 2.0 * (p->radius + p->center);
+	cameraView.viewTarget = p->center;
 	*/
+	cameraView.viewPosition = glm::dvec3(0, 0, 3);
+	cameraView.viewTarget = glm::dvec3(0, 0, 0);
+
+	eyePosition = (glm::vec3)cameraView.viewPosition;
+	eyeDirection = (glm::vec3)cameraView.viewTarget;
+
+	lightPosition = eyePosition;
+	lightEye = eyeDirection;
 
 	int n = 0;
-	std::vector<Polyhedron*> loops;
-	Polyhedron* lp;
-	lp = p;
-	loops.push_back(lp);
-	for (int i = 0; i < n; ++i)
-	{
-		Polyhedron* q;
-		q = Subdivision::LoopSubdivisionHeap(loops[i]);
-		q->Initialize();
-		MeshAnalysis::GetCornerList(q);
-		MeshAnalysis::GetValenceDeficit(q);
-		MeshAnalysis::GetAngleDeficit(p);
-		loops.push_back(q);
-		delete(loops[i]);
-	}
-	std::vector<double> triangleHorizons = MeshAnalysis::GetHorizonMeasureLength(loops.back());
-	mesh = MeshComponent(loops.back(), triangleHorizons);
-	delete(loops.back());
+	Polyhedron* lp = SubdivideMesh(p, n);
 
-	// Color vertices according to the horizon measures.
 	/*
-	std::vector<Vertex>& vertices = mesh.getVertices();
-	std::vector<double> horizonMeasures = MeshAnalysis::ComputeHorizonMeasure(loops.back());
-	for (int i = 0; i < horizonMeasures.size(); ++i)
+	glm::mat4 rotate = glm::rotate(glm::mat4(1.0f), 0.0f * (float)M_PI, glm::vec3(0, 1, 0));
+	glm::mat4 viewMatrix = glm::lookAt(eyePosition, eyeDirection, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 normalMatrix = glm::transpose(glm::inverse(viewMatrix * rotate));
+	std::vector<Vert>& vertices = lp->vlist;
+	for (Vert& v : vertices)
 	{
-		double x = horizonMeasures[i];
-		double colorFactor = sqrt(x);
-		//double colorFactor = cbrt(x);
-		//double colorFactor = x;
-		//double colorFactor = x * x;
-		vertices[i].r = 1;
-		//vertices[i].r = 1.0f;
-		vertices[i].g = 1.0f - colorFactor;
-		vertices[i].b = 1.0f - colorFactor;
+		// Rotate position vector.
+		glm::dvec4 vPosition = glm::dvec4(v.x, v.y, v.z, 0.0);
+		vPosition = rotate * vPosition;
+		v.x = vPosition.x;
+		v.y = vPosition.y;
+		v.z = vPosition.z;
+
+		// Rotate normal vector.
+		glm::dvec4 vNormal = glm::dvec4(v.normal.x, v.normal.y, v.normal.z, 0);
+		vNormal = normalMatrix * vNormal;
+		v.normal = glm::normalize(glm::dvec3(vNormal.x, vNormal.y, vNormal.z));
 	}
 	*/
+
+	std::vector<double> triangleHorizons = MeshAnalysis::GetHorizonMeasureLength(lp);
+	mesh = MeshComponent(lp, triangleHorizons);
+
+	delete(lp);
+
 	Loader::PrepareMesh(mesh);
 	meshes.push_back(mesh);
 	
@@ -339,18 +360,6 @@ void InitLists()
 		Loader::PrepareMesh(meshes[i]);
 	}
 	*/
-
-
-	View cameraView;
-	cameraView.p = p;
-	cameraView.viewPosition = 2.0 * (p->radius + p->center);
-	cameraView.viewTarget = p->center;
-
-	eyePosition = (glm::vec3)cameraView.viewPosition;
-	eyeDirection = (glm::vec3)cameraView.viewTarget;
-
-	lightPosition = eyePosition;
-	lightEye = eyeDirection;
 
 }
 
@@ -389,6 +398,10 @@ void Display()
 	// Rotate the camera:
 	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
 	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
+	viewMatrix = camera * rotateY * rotateX * scale;
+
+	// Update the mouse picker to the new camera:
+	mousePicker.UpdateViewMatrix(viewMatrix);
 
 	// Activate the shader:
 	shader.Start();
@@ -403,14 +416,13 @@ void Display()
 		glEnableVertexAttribArray(3);
 		glEnableVertexAttribArray(4);
 
-		viewMatrix = camera * rotateY * rotateX * scale;
 		shader.LoadProjectionMatrix(perspectiveMatrix);
 		shader.LoadViewMatrix(viewMatrix);
 		shader.LoadTransformMatrix(meshes[i].transform);
 		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, eyePosition);
 		shader.LoadTexture(3);
-
-
+		shader.LoadWireframe(enableWireframe);
+		
 		// Draw calls:
 		glDrawElements(GL_TRIANGLES, meshes[i].getCount(), GL_UNSIGNED_INT, nullptr);
 	}
@@ -472,11 +484,21 @@ void DoMainMenu(int id)
 	glutPostRedisplay( );
 }
 
+void DoWireframeMenu(int id)
+{
+	enableWireframe = id;
+}
+
 void InitMenus()
 {
 	glutSetWindow(mainWindow);
 
+	int wireframeMenu = glutCreateMenu(DoWireframeMenu);
+	glutAddMenuEntry("Enable", 1);
+	glutAddMenuEntry("Disable", 0);
+
 	int mainmenu = glutCreateMenu(DoMainMenu);
+	glutAddSubMenu("Wireframe", wireframeMenu);
 	glutAddMenuEntry("Reset", 0);
 	glutAddMenuEntry("Quit", 1);
 
@@ -538,6 +560,31 @@ void Keyboard(unsigned char c, int x, int y)
 	glutPostRedisplay( );
 }
 
+void MouseRayTriangleIntersection(glm::vec3& ray)
+{
+	// Check if the ray intersects any triangle from any mesh.
+	int count = 0;
+	for (MeshComponent& mesh : meshes)
+	{
+		std::vector<uint>& triangles = mesh.getTriangles();
+		std::vector<Vertex>& vertices = mesh.getVertices();
+		for (int i = 0; i < triangles.size(); i += 3)
+		{
+			// Get the vertices of the triangle.
+			glm::vec3 v0 = vertices[triangles[i + 0]].getPosition();
+			glm::vec3 v1 = vertices[triangles[i + 1]].getPosition();
+			glm::vec3 v2 = vertices[triangles[i + 2]].getPosition();
+
+			glm::vec2 position;
+			float distance;
+			bool intersection = glm::intersectRayTriangle(eyePosition, ray, v0, v1, v2, position, distance);
+			if (intersection)
+				++count;
+		}
+	}
+	std::cout << "Number of intersections: " << count << std::endl;
+}
+
 
 // When the mouse button transitions down or up:
 void MouseButton(int button, int state, int x, int y)
@@ -586,6 +633,15 @@ void MouseButton(int button, int state, int x, int y)
 	else
 	{
 		activeMouseButton &= ~b;		// clear the proper bit
+	}
+
+	// Update the mouse picker only on a LEFT CLICK... or else lag everything to death when zooming in/out.
+	if (b == leftMouseButton)
+	{
+		mousePicker.setMouseCoordinates(x, y);
+		glm::vec3 ray = mousePicker.ComputeRay(meshes[0].transform);
+		std::cout << x << " " << y << "--> " << ray.x << " " << ray.y << " " << ray.z << ": " << glm::length(ray) << std::endl;
+		MouseRayTriangleIntersection(ray);
 	}
 
 	glutSetWindow(mainWindow);
