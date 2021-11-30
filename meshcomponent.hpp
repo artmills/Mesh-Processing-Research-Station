@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include "glm/glm.hpp"
+#include "glm/gtx/string_cast.hpp"
 
 #include "vertex.hpp"
 #include "polyhedron.hpp"

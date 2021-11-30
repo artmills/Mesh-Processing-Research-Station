@@ -14,15 +14,21 @@ float MeshAnalysis::GetHorizonArea(Vertex v0, Vertex v1, Vertex v2)
 	float d1 = std::clamp(glm::dot(n0, n2), -1.0f, 1.0f);
 	float d2 = std::clamp(glm::dot(n0, n1), -1.0f, 1.0f);
 
-	float s = 2.0f * (acos(d0) + acos(d1) + acos(d2)); 
-	if (s != s)
-	{
-		std::cout << d2 << " " << d1 << " " << d2 << " " << acos(d0) << " " << acos(d1) << " " << acos(d2) << std::endl;
-	}
 	return 2.0f * (acos(d0) + acos(d1) + acos(d2));
 }
 double MeshAnalysis::GetHorizonArea(Triangle t)
 {
+	glm::dvec3 n0 = t.vertices[0]->normal;
+	glm::dvec3 n1 = t.vertices[1]->normal;
+	glm::dvec3 n2 = t.vertices[2]->normal;
+
+	double d0 = std::clamp(glm::dot(n0, n1), -1.0, 1.0);
+	double d1 = std::clamp(glm::dot(n1, n2), -1.0, 1.0);
+	double d2 = std::clamp(glm::dot(n2, n0), -1.0, 1.0);
+
+	return 2.0 * (acos(d0) + acos(d1) + acos(d2));
+
+	/*
 	glm::dvec3 v1 = t.vertices[0]->normal;
 	glm::dvec3 v2 = t.vertices[1]->normal;
 	glm::dvec3 v3 = t.vertices[2]->normal;
@@ -48,6 +54,7 @@ double MeshAnalysis::GetHorizonArea(Triangle t)
 
 	//return 2.0 * (angle12 + angle23 + angle31);
 	return 2.0 * (acute12 + acute23 + acute31);
+	*/
 
 	/*
 	return 2.0 * (acos(d1) + acos(d2) + acos(d3));
@@ -56,30 +63,30 @@ double MeshAnalysis::GetHorizonArea(Triangle t)
 
 }
 
-std::vector<double> MeshAnalysis::GetHorizonMeasureLength(Polyhedron* p)
+std::vector<double> MeshAnalysis::GetHorizonMeasureLength2(Polyhedron* p)
 {
 	std::vector<double> ratios;
 	for (Triangle& t : p->tlist)
 	{
-		double horizonArea = GetHorizonArea(t);
+		glm::vec3 p0 = (glm::vec3)(t.vertices[0]->x, t.vertices[0]->y, t.vertices[0]->z);
+		glm::vec3 p1 = (glm::vec3)(t.vertices[1]->x, t.vertices[1]->y, t.vertices[1]->z);
+		glm::vec3 p2 = (glm::vec3)(t.vertices[2]->x, t.vertices[2]->y, t.vertices[2]->z);
+		Vertex v0;
+		Vertex v1;
+		Vertex v2;
+		v0.setNormal((glm::vec3)(t.vertices[0]->normal));
+		v1.setNormal((glm::vec3)(t.vertices[1]->normal));
+		v2.setNormal((glm::vec3)(t.vertices[2]->normal));
+
+		double horizonArea = GetHorizonArea(v0, v1, v2);
 
 		// Compute perimeter of the triangle.
-		glm::dvec3 p1 = (glm::dvec3)(t.vertices[0]->x, t.vertices[0]->y, t.vertices[0]->z);
-		glm::dvec3 p2 = (glm::dvec3)(t.vertices[1]->x, t.vertices[1]->y, t.vertices[1]->z);
-		glm::dvec3 p3 = (glm::dvec3)(t.vertices[2]->x, t.vertices[2]->y, t.vertices[2]->z);
+		double l0 = glm::length(p0 - p1);
 		double l1 = glm::length(p1 - p2);
-		double l2 = glm::length(p2 - p3);
-		double l3 = glm::length(p3 - p1);
+		double l2 = glm::length(p2 - p0);
 		
-		/*
-		double s = horizonArea / (l1 + l2 + l3);
-		std::cout << s << std::endl;
-		if (s != s)
-		{
-			std::cout << horizonArea << " " << l1 + l2 + l3 << " " << horizonArea / (l1 + l2 + l3) << std::endl;
-		}
-		*/
-		ratios.push_back(horizonArea / (l1 + l2 + l3));
+		double s = horizonArea / (l0 + l1 + l2);
+		ratios.push_back(horizonArea / (l0 + l1 + l2));
 	}
 
 	// Now analyze statistics:
@@ -115,6 +122,63 @@ std::vector<double> MeshAnalysis::GetHorizonMeasureLength(Polyhedron* p)
 	std::cout << "The min is " << min << ". " << std::endl;
 	std::cout << std::endl;
 	*/
+
+	return ratios;
+}
+
+std::vector<double> MeshAnalysis::GetHorizonMeasureLength(Polyhedron* p)
+{
+	std::vector<double> ratios;
+	for (Triangle& t : p->tlist)
+	{
+		double horizonArea = GetHorizonArea(t);
+
+		// Compute perimeter of the triangle.
+		glm::dvec3 p0 = (glm::dvec3)(t.vertices[0]->x, t.vertices[0]->y, t.vertices[0]->z);
+		glm::dvec3 p1 = (glm::dvec3)(t.vertices[1]->x, t.vertices[1]->y, t.vertices[1]->z);
+		glm::dvec3 p2 = (glm::dvec3)(t.vertices[2]->x, t.vertices[2]->y, t.vertices[2]->z);
+		double l0 = glm::length(p0 - p1);
+		double l1 = glm::length(p1 - p2);
+		double l2 = glm::length(p2 - p0);
+		
+		double s = horizonArea / (l0 + l1 + l2);
+		ratios.push_back(horizonArea / (l0 + l1 + l2));
+	}
+
+	// Now analyze statistics:
+	/*
+	double sum = 0;
+	double max = 0;
+	double min = std::numeric_limits<double>::max();
+	//double zeroes = 0;
+	for (int i = 0; i < ratios.size(); ++i)
+	{
+		double x = ratios[i];
+		sum += x;	
+		if (x > max)
+			max = x;
+		if (x < min)
+			min = x;
+		//if (x == 0)
+		//	zeroes++;
+	}
+	double mean = sum / (float)ratios.size();
+
+	double stdSums = 0;
+	for (int i = 0; i < ratios.size(); ++i)
+	{
+		stdSums += (ratios[i] - mean) * (ratios[i] - mean);
+	}
+	double standardDeviation = sqrt((1.0f / (float)ratios.size()) * stdSums);
+
+	std::cout << "Statistics for: Area(H_V) / Length(V): " << std::endl;
+	std::cout << "The mean is " << mean << ". " << std::endl;
+	std::cout << "The standard deviation is " << standardDeviation << ". " << std::endl;
+	std::cout << "The max is " << max << ". " << std::endl;
+	std::cout << "The min is " << min << ". " << std::endl;
+	std::cout << std::endl;
+	*/
+
 	return ratios;
 }
 

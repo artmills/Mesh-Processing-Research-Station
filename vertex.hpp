@@ -38,6 +38,7 @@ public:
 
 	/** Set the normal vector of this vertex. **/
 	void setNormal(float nx, float ny, float nz);
+	void setNormal(glm::vec3 normal);
 
 	/** Set the texture coordinates of the vertex. **/
 	void setTexture(float s, float t);

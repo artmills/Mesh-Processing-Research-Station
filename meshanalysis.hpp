@@ -46,6 +46,7 @@ public:
 	
 	// Get alternative horizon measure: Area(H_V) / Length(V).
 	std::vector<double> static GetHorizonMeasureLength(Polyhedron* p);
+	std::vector<double> static GetHorizonMeasureLength2(Polyhedron* p);
 
 	// Get an average horizon measure for each vertex.
 	std::vector<double> static ComputeHorizonMeasure(Polyhedron* p);

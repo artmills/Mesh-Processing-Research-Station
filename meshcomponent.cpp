@@ -34,18 +34,20 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 		double x = triangleHorizon[i];
 		sum += x;	
 		if (x > max)
+		{
 			max = x;
+		}
 		if (x < min)
 			min = x;
 	}
-	double mean = sum / (float)triangleHorizon.size();
+	double mean = sum / (double)triangleHorizon.size();
 
 	double stdSums = 0;
 	for (int i = 0; i < triangleHorizon.size(); ++i)
 	{
 		stdSums += (triangleHorizon[i] - mean) * (triangleHorizon[i] - mean);
 	}
-	double standardDeviation = sqrt((1.0f / (float)triangleHorizon.size()) * stdSums);
+	double standardDeviation = sqrt((1.0 / (double)triangleHorizon.size()) * stdSums);
 
 	std::cout << "Statistics for: Area(H_V) / Length(V): " << std::endl;
 	std::cout << "The mean is " << mean << ". " << std::endl;
@@ -54,6 +56,9 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 	std::cout << "The min is " << min << ". " << std::endl;
 
 	int divergeCount = 0;
+	double maxDistanceFromMean = max - mean;
+	if (mean - min > maxDistanceFromMean)
+		maxDistanceFromMean = mean - min;
 	
 	// Get the vertices of each triangle.
 	for (int i = 0; i < p->tlist.size(); ++i)
@@ -63,13 +68,20 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 		// Look up horizon measure and compare it to the average.
 		double horizon = triangleHorizon[i];
 		double distFromMean = abs(horizon - mean);
-		double percent = InverseLerp(min, max, distFromMean);
+		double percent = InverseLerp(0, maxDistanceFromMean, distFromMean);
 		percent = cbrt(percent);
 
-		//color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
+		color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
+
+		if (horizon == max)
+		{
+			std::cout << "Max horizon measure is " << horizon << " " << max << std::endl;
+			color = glm::vec3(0, 0, 1);
+		}
 		
 
 		// Within half a std: green.
+		/*
 		if ((distFromMean < mean + 0.5*standardDeviation) && (distFromMean > mean - 0.5*standardDeviation))
 			color = glm::vec3(0.0f, 1.0f - (distFromMean / mean), 0.0f);
 		// Within a std: green + blue.
@@ -87,6 +99,7 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 			color = glm::vec3(1.0f, 0.0f, 0.0f);
 			++divergeCount;
 		}
+		*/
 
 		// Vertices:
 		for (int j = 0; j < 3; ++j)
@@ -98,7 +111,14 @@ MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon
 			v.setColor(color.x, color.y, color.z, 1.0f);
 			v.setNormal((float)current->normal.x, (float)current->normal.y, (float)current->normal.z);
 			v.setTexture(0, 0);
-			v.setHighlightColor(glm::vec4(0, 1, 0, 1));
+			v.setHighlightColor(glm::vec4(0, 0, 0, 1));
+
+			if (horizon == max)
+			{
+				std::cout << "Vertex: " << i << std::endl;
+				std::cout << glm::to_string(v.getPosition()) << std::endl;
+				std::cout << glm::to_string(v.getNormal()) << std::endl;
+			}
 
 			// Barycentric coordinate for wireframe shader.
 			glm::vec3 barycentric;

@@ -306,7 +306,7 @@ void InitLists()
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
 
-	Polyhedron* p = new Polyhedron("./tempmodels/sphere.ply");
+	Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
 	p->Initialize();
 
 	View cameraView;
@@ -353,6 +353,14 @@ void InitLists()
 
 	std::vector<double> triangleHorizons = MeshAnalysis::GetHorizonMeasureLength(lp);
 	mesh = MeshComponent(lp, triangleHorizons);
+
+	std::cout << mesh.getTriangles().size() << " " << lp->tlist.size() << std::endl;
+	/*
+	for (int i = 0; i < mesh.getTriangles().size(); ++i)
+	{
+
+	}
+	*/
 
 	delete(lp);
 
@@ -427,6 +435,7 @@ void Display()
 		
 		// Draw calls:
 		glDrawElements(GL_TRIANGLES, meshes[i].getCount(), GL_UNSIGNED_INT, nullptr);
+		//glDrawArrays(GL_TRIANGLES, 0, meshes[i].getCount());
 	}
 
 	shader.Stop();
@@ -570,14 +579,46 @@ void Keyboard(unsigned char c, int x, int y)
 	glutPostRedisplay( );
 }
 
+void InfoDumpSelectedTriangle(uint meshIndex, uint triangleIndex, uint v0, uint v1, uint v2)
+{
+	Vertex& w0 = meshes[meshIndex].getVertices()[v0];
+	Vertex& w1 = meshes[meshIndex].getVertices()[v1];
+	Vertex& w2 = meshes[meshIndex].getVertices()[v2];
+
+	glm::vec3 p0 = w0.getPosition();
+	glm::vec3 p1 = w1.getPosition();
+	glm::vec3 p2 = w2.getPosition();
+	float l0 = glm::length(p0 - p1);
+	float l1 = glm::length(p1 - p2);
+	float l2 = glm::length(p2 - p0);
+	float perimeter = l0 + l1 + l2;
+	float horizonArea = MeshAnalysis::GetHorizonArea(w0, w1, w2);
+
+	std::cout << std::endl;
+	std::cout << "Triangle #" << triangleIndex << " selected on mesh #" << meshIndex << std::endl;
+	std::cout << "Position vectors: " << std::endl;
+	std::cout << glm::to_string(p0) << std::endl;
+	std::cout << glm::to_string(p1) << std::endl;
+	std::cout << glm::to_string(p2) << std::endl;
+	std::cout << "Normal vectors: " << std::endl;
+	std::cout << glm::to_string(w0.getNormal()) << std::endl;
+	std::cout << glm::to_string(w1.getNormal()) << std::endl;
+	std::cout << glm::to_string(w2.getNormal()) << std::endl;
+	std::cout << "Triangle perimeter: " << perimeter << std::endl;
+	std::cout << "Horizon area: " << horizonArea << std::endl;
+	std::cout << "Horizon measure: " << horizonArea / perimeter << std::endl;;
+	std::cout << std::endl;
+}
+
 void SetHighlight(uint meshID, uint triangleIndex, glm::vec4 color)
 {
 	MeshComponent& mesh = meshes[meshID];
 	uint v0 = mesh.getTriangles()[triangleIndex + 0];
 	uint v1 = mesh.getTriangles()[triangleIndex + 1];
 	uint v2 = mesh.getTriangles()[triangleIndex + 2];
-	std::cout << "Vertices selected at " << v0 << " " << v1 << " " << v2 << std::endl;
+	//std::cout << "Vertices selected at " << v0 << " " << v1 << " " << v2 << std::endl;
 	Loader::UpdateHighlight(mesh.getVBO(), v0, v1, v2, color);
+	InfoDumpSelectedTriangle(meshID, triangleIndex, v0, v1, v2);
 }
 
 void MouseRayTriangleIntersection(glm::vec3& ray)
@@ -620,6 +661,9 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 			}
 		}
 	}
+	if (index > -1)
+		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
+	/*
 	if (index == -1)
 	{
 		std::cout << "No intersection found. " << std::endl;
@@ -630,6 +674,7 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 		std::cout << "Highlighting mesh " << meshIndex << std::endl;
 		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
 	}
+	*/
 }
 
 

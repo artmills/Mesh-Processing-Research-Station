@@ -58,6 +58,12 @@ void Vertex::setColor(float r, float g, float b, float a)
 	this->b = b;
 	this->a = a;
 }
+void Vertex::setNormal(glm::vec3 normal)
+{
+	this->nx = normal.x;
+	this->ny = normal.y;
+	this->nz = normal.z;
+}
 void Vertex::setNormal(float nx, float ny, float nz)
 {
 	this->nx = nx;
