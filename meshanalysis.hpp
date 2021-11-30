@@ -30,27 +30,24 @@ public:
 	// Compute angle deficit of a polyhedron.
 	void static GetAngleDeficit(Polyhedron* p);
 
-	// Compute relative horizon viewer set area.
-	double static GetHorizonMeasure(Triangle t);
-	
-	// Compute area of the horizon viewer set.
-	double static GetHorizonArea(Triangle t);
-	float static GetHorizonArea(Vertex v0, Vertex v1, Vertex v2);
+	// Compute perimeter of a single triangle.
+	static float ComputePerimeter(Vertex& v0, Vertex& v1, Vertex& v2);
+	static float ComputePerimeter(Triangle& t);
+	static double ComputePerimeterDouble(Triangle& t);
 
-	// Get the horizon measure for each triangle, H_V / V.
-	void static HorizonMeasureAnalysis(Polyhedron* p);
+	// Compute area of the horizon viewer set of a single triangle.
+	static float ComputeHorizonArea(Vertex& v0, Vertex& v1, Vertex& v2);
+	static float ComputeHorizonArea(Triangle& t);
+	static double ComputeHorizonAreaDouble(Triangle& t);
 
-	// Get alternative horizon measure: Area(H_V) / Length(V).
-	void static HorizonMeasureLength(Polyhedron* p);
-	void static HorizonMeasureLength(std::vector<MeshComponent>& meshes);
-	
-	// Get alternative horizon measure: Area(H_V) / Length(V).
-	std::vector<double> static GetHorizonMeasureLength(Polyhedron* p);
-	std::vector<double> static GetHorizonMeasureLength2(Polyhedron* p);
+	// Compute horizon measure.
+	static float ComputeHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2);
+	static float ComputeHorizonMeasure(Triangle& t);
+	static double ComputeHorizonMeasureDouble(Triangle& t);
 
-	// Get an average horizon measure for each vertex.
-	std::vector<double> static ComputeHorizonMeasure(Polyhedron* p);
-
+	// Get the horizon measure of every triangle.
+	static std::vector<float> GetHorizonMeasures(std::vector<Triangle>& triangles);
+	static std::vector<double> GetHorizonMeasuresDouble(std::vector<Triangle>& triangles);
 
 private:
 

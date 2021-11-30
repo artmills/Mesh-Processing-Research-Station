@@ -306,7 +306,7 @@ void InitLists()
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
 
-	Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
+	Polyhedron* p = new Polyhedron("./tempmodels/happy.ply");
 	p->Initialize();
 
 	View cameraView;
@@ -330,40 +330,10 @@ void InitLists()
 	int n = 0;
 	Polyhedron* lp = SubdivideMesh(p, n);
 
-	/*
-	glm::mat4 rotate = glm::rotate(glm::mat4(1.0f), 0.0f * (float)M_PI, glm::vec3(0, 1, 0));
-	glm::mat4 viewMatrix = glm::lookAt(eyePosition, eyeDirection, glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 normalMatrix = glm::transpose(glm::inverse(viewMatrix * rotate));
-	std::vector<Vert>& vertices = lp->vlist;
-	for (Vert& v : vertices)
-	{
-		// Rotate position vector.
-		glm::dvec4 vPosition = glm::dvec4(v.x, v.y, v.z, 0.0);
-		vPosition = rotate * vPosition;
-		v.x = vPosition.x;
-		v.y = vPosition.y;
-		v.z = vPosition.z;
-
-		// Rotate normal vector.
-		glm::dvec4 vNormal = glm::dvec4(v.normal.x, v.normal.y, v.normal.z, 0);
-		vNormal = normalMatrix * vNormal;
-		v.normal = glm::normalize(glm::dvec3(vNormal.x, vNormal.y, vNormal.z));
-	}
-	*/
-
-	std::vector<double> triangleHorizons = MeshAnalysis::GetHorizonMeasureLength(lp);
-	mesh = MeshComponent(lp, triangleHorizons);
-
-	std::cout << mesh.getTriangles().size() << " " << lp->tlist.size() << std::endl;
-	/*
-	for (int i = 0; i < mesh.getTriangles().size(); ++i)
-	{
-
-	}
-	*/
+	std::vector<double> horizons = MeshAnalysis::GetHorizonMeasuresDouble(lp->tlist);
+	mesh = MeshComponent(lp, horizons);
 
 	delete(lp);
-
 	Loader::PrepareMesh(mesh);
 	meshes.push_back(mesh);
 	
@@ -585,21 +555,15 @@ void InfoDumpSelectedTriangle(uint meshIndex, uint triangleIndex, uint v0, uint 
 	Vertex& w1 = meshes[meshIndex].getVertices()[v1];
 	Vertex& w2 = meshes[meshIndex].getVertices()[v2];
 
-	glm::vec3 p0 = w0.getPosition();
-	glm::vec3 p1 = w1.getPosition();
-	glm::vec3 p2 = w2.getPosition();
-	float l0 = glm::length(p0 - p1);
-	float l1 = glm::length(p1 - p2);
-	float l2 = glm::length(p2 - p0);
-	float perimeter = l0 + l1 + l2;
-	float horizonArea = MeshAnalysis::GetHorizonArea(w0, w1, w2);
+	float perimeter = MeshAnalysis::ComputePerimeter(w0, w1, w2);
+	float horizonArea = MeshAnalysis::ComputeHorizonArea(w0, w1, w2);
 
 	std::cout << std::endl;
 	std::cout << "Triangle #" << triangleIndex << " selected on mesh #" << meshIndex << std::endl;
 	std::cout << "Position vectors: " << std::endl;
-	std::cout << glm::to_string(p0) << std::endl;
-	std::cout << glm::to_string(p1) << std::endl;
-	std::cout << glm::to_string(p2) << std::endl;
+	std::cout << glm::to_string(w0.getPosition()) << std::endl;
+	std::cout << glm::to_string(w1.getPosition()) << std::endl;
+	std::cout << glm::to_string(w2.getPosition()) << std::endl;
 	std::cout << "Normal vectors: " << std::endl;
 	std::cout << glm::to_string(w0.getNormal()) << std::endl;
 	std::cout << glm::to_string(w1.getNormal()) << std::endl;
@@ -616,7 +580,6 @@ void SetHighlight(uint meshID, uint triangleIndex, glm::vec4 color)
 	uint v0 = mesh.getTriangles()[triangleIndex + 0];
 	uint v1 = mesh.getTriangles()[triangleIndex + 1];
 	uint v2 = mesh.getTriangles()[triangleIndex + 2];
-	//std::cout << "Vertices selected at " << v0 << " " << v1 << " " << v2 << std::endl;
 	Loader::UpdateHighlight(mesh.getVBO(), v0, v1, v2, color);
 	InfoDumpSelectedTriangle(meshID, triangleIndex, v0, v1, v2);
 }

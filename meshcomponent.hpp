@@ -39,6 +39,7 @@ public:
 	std::vector<Vertex>& getVertices();
 	std::vector<uint>& getTriangles();
 
+	float InverseLerp(float start, float end, float v);
 	double InverseLerp(double start, double end, double v);
 	
 	void CreateModel(std::vector<Vertex> vertices, std::vector<uint> triangles);
@@ -46,6 +47,8 @@ public:
 	glm::mat4 transform;
 
 private:
+
+	glm::vec3 InterpolateColor(double min, double mean, double max, double value);
 
 	// raw model data:
 	std::vector<Vertex> vertices;
