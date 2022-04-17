@@ -4,12 +4,30 @@
 MeshAnalysis::MeshAnalysis() {}
 MeshAnalysis::~MeshAnalysis() {}
 
+std::vector<double> MeshAnalysis::GetApproximateGaussianCurvatures(std::vector<Triangle>& triangles)
+{
+	std::vector<double> gaussianCurvatures(triangles.size());
+	for (int i = 0; i < triangles.size(); ++i)
+	{
+		gaussianCurvatures[i] = ComputeApproximateGaussianCurvature(triangles[i]);
+	}
+	return gaussianCurvatures;
+}
 std::vector<double> MeshAnalysis::GetHorizonMeasuresDouble(std::vector<Triangle>& triangles)
 {
 	std::vector<double> horizonMeasures(triangles.size());
 	for (int i = 0; i < triangles.size(); ++i)
 	{
 		horizonMeasures[i] = ComputeHorizonMeasureDouble(triangles[i]);
+	}
+	return horizonMeasures;
+}
+std::vector<double> MeshAnalysis::GetOriginalHorizonMeasuresDouble(std::vector<Triangle>& triangles)
+{
+	std::vector<double> horizonMeasures(triangles.size());
+	for (int i = 0; i < triangles.size(); ++i)
+	{
+		horizonMeasures[i] = ComputeOriginalHorizonMeasureDouble(triangles[i]);
 	}
 	return horizonMeasures;
 }
@@ -28,6 +46,10 @@ float MeshAnalysis::ComputeHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2)
 {
 	return ComputeHorizonArea(v0, v1, v2) / ComputePerimeter(v0, v1, v2);
 }
+float MeshAnalysis::ComputeOriginalHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2)
+{
+	return ComputeHorizonArea(v0, v1, v2) / ComputeArea(v0, v1, v2);
+}
 float MeshAnalysis::ComputeHorizonMeasure(Triangle& t)
 {
 	return ComputeHorizonArea(t) / ComputePerimeter(t);
@@ -35,6 +57,21 @@ float MeshAnalysis::ComputeHorizonMeasure(Triangle& t)
 double MeshAnalysis::ComputeHorizonMeasureDouble(Triangle& t)
 {
 	return ComputeHorizonAreaDouble(t) / ComputePerimeterDouble(t);
+}
+double MeshAnalysis::ComputeOriginalHorizonMeasureDouble(Triangle& t)
+{
+	return ComputeHorizonAreaDouble(t) / t.area;
+}
+float MeshAnalysis::ComputeApproximateGaussianCurvature(Vertex& v0, Vertex& v1, Vertex& v2)
+{
+	glm::vec3 n0 = v0.getNormal();
+	glm::vec3 n1 = v1.getNormal();
+	glm::vec3 n2 = v2.getNormal();
+	return ComputeSphericalArea(n0, n1, n2) / ComputeArea(v0, v1, v2);
+}
+double MeshAnalysis::ComputeApproximateGaussianCurvature(Triangle& t)
+{
+	return ComputeSphericalAreaDouble(t.vertices[0]->normal, t.vertices[1]->normal, t.vertices[2]->normal) / ComputeAreaDouble(t);
 }
 
 float MeshAnalysis::ComputeHorizonArea(Vertex& v0, Vertex& v1, Vertex& v2)
@@ -95,6 +132,63 @@ float MeshAnalysis::ComputePerimeter(Vertex& v0, Vertex& v1, Vertex& v2)
 
 	// Return the sum.
 	return l01 + l12 + l20;
+}
+double MeshAnalysis::ComputeAreaDouble(Triangle& t)
+{
+	Vert* v0 = t.vertices[0];
+	glm::dvec3 v0Position = glm::dvec3(v0->x, v0->y, v0->z);
+	Vert* v1 = t.vertices[1];
+	glm::dvec3 v1Position = glm::dvec3(v1->x, v1->y, v1->z);
+	Vert* v2 = t.vertices[2];
+	glm::dvec3 v2Position = glm::dvec3(v2->x, v2->y, v2->z);
+
+	glm::dvec3 p1 = v1Position - v0Position;
+	glm::dvec3 p2 = v2Position - v0Position;
+	return 0.5 * glm::length(glm::cross(p1, p2));
+}
+float MeshAnalysis::ComputeArea(Vertex& v0, Vertex& v1, Vertex& v2)
+{
+	glm::vec3 p1 = v1.getPosition() - v0.getPosition();
+	glm::vec3 p2 = v2.getPosition() - v0.getPosition();
+	return 0.5f * glm::length(glm::cross(p1, p2));
+}
+float MeshAnalysis::ComputeSphericalArea(glm::vec3& n0, glm::vec3& n1, glm::vec3& n2)
+{
+	// https://math.stackexchange.com/questions/9819/area-of-a-spherical-triangle
+	// Cross products:
+	glm::vec3 cross01 = glm::cross(n0, n1);
+	cross01 /= glm::length(cross01);
+	glm::vec3 cross12 = glm::cross(n1, n2);
+	cross12 /= glm::length(cross12);
+	glm::vec3 cross20 = glm::cross(n2, n0);
+	cross20 /= glm::length(cross20);
+
+	// Angles:
+	float angle201 = acos(glm::clamp(glm::dot(cross20, -cross01), -1.0f, 1.0f));
+	float angle012 = acos(glm::clamp(glm::dot(cross01, -cross12), -1.0f, 1.0f));
+	float angle120 = acos(glm::clamp(glm::dot(cross12, -cross20), -1.0f, 1.0f));
+
+	// Angle deficit:
+	return angle201 + angle012 + angle120 - (float)M_PI;
+}
+double MeshAnalysis::ComputeSphericalAreaDouble(glm::dvec3& n0, glm::dvec3& n1, glm::dvec3& n2)
+{
+	// https://math.stackexchange.com/questions/9819/area-of-a-spherical-triangle
+	// Cross products:
+	glm::dvec3 cross01 = glm::cross(n0, n1);
+	cross01 /= glm::length(cross01);
+	glm::dvec3 cross12 = glm::cross(n1, n2);
+	cross12 /= glm::length(cross12);
+	glm::dvec3 cross20 = glm::cross(n2, n0);
+	cross20 /= glm::length(cross20);
+
+	// Angles:
+	double angle201 = acos(glm::clamp(glm::dot(cross20, -cross01), -1.0, 1.0));
+	double angle012 = acos(glm::clamp(glm::dot(cross01, -cross12), -1.0, 1.0));
+	double angle120 = acos(glm::clamp(glm::dot(cross12, -cross20), -1.0, 1.0));
+
+	// Angle deficit:
+	return angle201 + angle012 + angle120 - M_PI;
 }
 
 double MeshAnalysis::ComputePerimeterDouble(Triangle& t)
@@ -298,7 +392,8 @@ void MeshAnalysis::ComputeAngle(Corner& c)
 	glm::dvec3 cn = cnWorld - cWorld;
 	glm::dvec3 cp = cpWorld - cWorld;
 
-	double dot = glm::dot(cn, cp);
+	double dot = glm::clamp(glm::dot(cn, cp), -1.0, 1.0);
+	//double dot = glm::dot(cn, cp);
 	double cnLength = glm::length(cn);
 	double cpLength = glm::length(cp);
 	double angle = acos(dot / (cnLength * cpLength));
@@ -332,7 +427,6 @@ void MeshAnalysis::GetAngleDeficit(Polyhedron* p)
 	for (int i = 0; i < p->vlist.size(); ++i)
 	{
 		double vertexAngle = p->vlist[i].totalAngle;
-		//std::cout << vertexAngle << std::endl;
 		double angleDeficit = 2 * M_PI - vertexAngle;
 		totalAngleDeficit += angleDeficit;
 	}

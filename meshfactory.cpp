@@ -1,5 +1,101 @@
 #include "meshfactory.hpp"
 
+MeshComponent MeshFactory::GetPseudosphere(uint numPointsPerSide)
+{
+	glm::vec3 normal(0.0f, 0.0f, 1.0f);
+	glm::vec3 axisA = glm::vec3(normal.y, normal.z, normal.x);
+	glm::vec3 axisB = glm::cross(normal, axisA);
+
+	std::vector<Vertex> vertices(numPointsPerSide * numPointsPerSide);
+	std::vector<uint> triangles((numPointsPerSide - 1) * (numPointsPerSide - 1) * 6);
+	int triIndex = 0;
+
+	for (int y = 0; y < numPointsPerSide; ++y)
+	{
+		for (int x = 0; x < numPointsPerSide; ++x)
+		{
+			// Align face of the square to be on a cube according to normal.
+			int vertexIndex = x + y * numPointsPerSide;
+			glm::vec2 t(x / (numPointsPerSide - 1.0f), y / (numPointsPerSide - 1.0f));
+			glm::vec3 position = normal + ((2.0f*(float)M_PI-0.01f)*(2.0f * t.x - 1.0f)) * axisA + (10.0f*(2.0f * t.y - 1.0f)) * axisB;
+
+			// Use the (x, y) coordinates as input to the pseudosphere parametrization.
+			float xx = y - tanh(x);
+			float yy = cos(x) / cosh(y);
+			float zz = sin(x) / cosh(y);
+
+			// Set vertex information.
+			Vertex& v = vertices[vertexIndex];
+
+			//v.setPosition(position.x, position.y, position.z);
+			v.setPosition(xx, yy, zz);
+			v.setNormal(normal.x, normal.y, normal.z);
+
+			v.setColor(0.0f, 1.0f, 0.0f, 1.0f);
+			v.setTexture(0.0f, 0.0f);
+
+			// Assemble triangles.
+			if (x != numPointsPerSide - 1 && y != numPointsPerSide - 1)
+			{
+				triangles[triIndex + 0] = vertexIndex;	
+				triangles[triIndex + 1] = vertexIndex + numPointsPerSide + 1;	
+				triangles[triIndex + 2] = vertexIndex + numPointsPerSide;	
+				triangles[triIndex + 3] = vertexIndex;	
+				triangles[triIndex + 4] = vertexIndex + 1;	
+				triangles[triIndex + 5] = vertexIndex + numPointsPerSide + 1;	
+				triIndex += 6;
+			}
+		}
+	}
+	
+	return MeshComponent(vertices, triangles);
+}
+
+
+MeshComponent MeshFactory::GetSphereTriangles(float length, uint numPointsPerSide)
+{
+	// Assign faces as if looking at the xy-plane.
+	std::vector<MeshComponent> cube;
+	MeshComponent back = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(0, 0, -1));
+	MeshComponent left = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(-1, 0, 0));
+	MeshComponent front = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(0, 0, 1));
+	MeshComponent right = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(1, 0, 0));
+	MeshComponent top = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(0, 1, 0));
+	MeshComponent bottom = GetNormalizedSquare(length, numPointsPerSide, glm::vec3(0, -1, 0));
+
+	cube.push_back(back);
+	cube.push_back(left);
+	cube.push_back(front);
+	cube.push_back(right);
+	cube.push_back(top);
+	cube.push_back(bottom);
+
+	// Super inefficient, but we want results now!
+	// Convert the meshes into a single vertex array that is triangle-based.
+	std::vector<Vertex> newVertices;
+	std::vector<uint> newTriangles;
+
+	for (MeshComponent& mesh : cube)
+	{
+		std::vector<Vertex>& vertices = mesh.getVertices();
+		std::vector<uint>& triangles = mesh.getTriangles();
+
+		for (int i = 0; i < triangles.size(); i += 3)
+		{
+			int index = newVertices.size();
+			newTriangles.push_back(index);
+			newVertices.push_back(vertices[triangles[i + 0]]);
+
+			newTriangles.push_back(index + 1);
+			newVertices.push_back(vertices[triangles[i + 1]]);
+
+			newTriangles.push_back(index + 2);
+			newVertices.push_back(vertices[triangles[i + 2]]);
+		}
+	}
+
+	return MeshComponent(newVertices, newTriangles);
+}
 std::vector<MeshComponent> MeshFactory::GetSphere(float length, uint numPointsPerSide)
 {
 	// Assign faces as if looking at the xy-plane.
@@ -22,7 +118,6 @@ std::vector<MeshComponent> MeshFactory::GetSphere(float length, uint numPointsPe
 }
 
 
-
 MeshComponent MeshFactory::GetNormalizedSquare(float length, uint numPointsPerSide, glm::vec3 normal)
 {
 	glm::vec3 axisA = glm::vec3(normal.y, normal.z, normal.x);
@@ -41,6 +136,7 @@ MeshComponent MeshFactory::GetNormalizedSquare(float length, uint numPointsPerSi
 			glm::vec2 t(x / (numPointsPerSide - 1.0f), y / (numPointsPerSide - 1.0f));
 			glm::vec3 position = normal + (2.0f * t.x - 1.0f) * axisA + (2.0f * t.y - 1.0f) * axisB;
 			//position = glm::normalize(position);
+
 			float x2 = position.x * position.x;
 			float y2 = position.y * position.y;
 			float z2 = position.z * position.z;
@@ -49,7 +145,7 @@ MeshComponent MeshFactory::GetNormalizedSquare(float length, uint numPointsPerSi
 			float zz = position.z * sqrt(1.0f - 0.5f * (x2 + y2) + (x2 * y2) / 3.0f);
 
 			// Set vertex information.
-			Vertex v;
+			Vertex& v = vertices[vertexIndex];
 
 			/*
 			v.setPosition(position.x, position.y, position.z);
@@ -61,7 +157,6 @@ MeshComponent MeshFactory::GetNormalizedSquare(float length, uint numPointsPerSi
 
 			v.setColor(0.0f, 1.0f, 0.0f, 1.0f);
 			v.setTexture(0.0f, 0.0f);
-			vertices[vertexIndex] = v;
 
 			// Assemble triangles.
 			if (x != numPointsPerSide - 1 && y != numPointsPerSide - 1)

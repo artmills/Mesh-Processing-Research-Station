@@ -73,6 +73,30 @@ float PerlinNoise::Noise(float x, float y, float z)
                                      Gradient(p[BB+1], x-1, y-1, z-1 ))));	
 }
 
+float PerlinNoise::LayeredNoise(float x, float y, float z, int octaves, float persistence, float lacunarity)
+{
+	// Call the Perlin Noise algorithm multiple times and add them all together.
+	// Octaves is the number of iterations.
+	// The frequency of the ith iteration will be 2^i.
+	// The amplitude of the ith iteration will be persistence^i.
+	float total = 0;
+	float frequency = 1;
+	float amplitude = 1;
+	//float max = 0; // Normalize.
+
+	for (int i = 0; i < octaves; ++i)
+	{
+		total += Noise(x * frequency, y * frequency, z * frequency) * amplitude;
+		//max += amplitude;
+		amplitude *= persistence;
+		frequency *= lacunarity;
+	}
+
+	return total;
+}
+
+
+
 float PerlinNoise::Fade(float t)
 {
 	return t * t * t * (t * (t * 6 - 15) + 10);

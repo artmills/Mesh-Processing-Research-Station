@@ -13,7 +13,11 @@ public:
 	PerlinNoise();
 	~PerlinNoise();
 
+	// One pass of the basic Perlin Noise algorithm.
 	float Noise(float x, float y, float z);
+
+	// More complex noise using octaves and persistance.
+	float LayeredNoise(float x, float y, float z, int octaves, float persistence, float lacunarity);
 
 private:
 

@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <glm/glm.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 /** This file contains the three pieces of geometry that builds up a mesh:
  * 1) Vert

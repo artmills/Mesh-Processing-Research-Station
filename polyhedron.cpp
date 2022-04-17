@@ -21,27 +21,94 @@ Polyhedron::Polyhedron(int vertices, int edges, int triangles)
 	clist = std::vector<Corner>(3 * tlist.size(), c);
 	center = glm::dvec3(0.0, 0.0, 0.0);
 }
-/*
-Polyhedron::Polyhedron(std::vector<MeshComponent>& meshes)
+
+// Load from a .obj file.
+Polyhedron::Polyhedron(std::string file, int a)
 {
 	vlist.reserve(40000);
 	elist.reserve(100000);
 	tlist.reserve(40000);
-	
-	for (MeshComponent mesh : meshes)
+
+	std::ifstream f(file);
+
+	// Check to see if the file can be opened.
+	if (!f)
 	{
-		// First get all of the vertices.
-		for (Vertex w : mesh.getVertices())
-		{
-			Vert v;
-			v.x = w.x;
-			v.y = w.y;
-			v.z = w.z;
-			v.normal = glm::dvec3(w.nx, w.ny, w.nz);
-		}
+		std::cout << "FILE COULD NOT BE OPENED." << std::endl;
+		exit(-1);
 	}
+
+	// Store each line of the file in a string.
+	std::string line;
+
+	// Check to see if some line is "# OBJ File".
+	/*
+	while (f && line != "# OBJ File")
+	{
+		std::getline(f, line);
+	}
+	if (!f)
+	{
+		std::cout << "NOT A .OBJ FILE." << std::endl;
+		exit(-1);
+	}
+	*/
+
+	// Get data from the file.
+	std::getline(f, line);
+	while (f)
+	{
+		// Vertex:
+		if (line[0] == 'v' && line[1] != 't')
+		{
+			// Remove the 'v' at the start of the line.
+			line.erase(0, line.find(" ") + 1);
+
+			Vert v;
+			glm::vec3 position;
+			for (int i = 0; i < 3; ++i)
+			{
+				std::string word = line.substr(0, line.find(" "));
+				position[i] = std::stof(word);
+				line.erase(0, line.find(" ") + 1);
+			}
+			v.x = position.x;
+			v.y = position.y;
+			v.z = position.z;
+			v.index = vlist.size();
+			vlist.push_back(v);
+		}
+
+		// Triangle:
+		if (line[0] == 'f')
+		{
+			// Remove the 't' at the start of the line.
+			line.erase(0, line.find(" ") + 1);
+			Triangle t;
+
+			// May be formatted as xxx/xxx xxx/xxx xxx/xxx. 
+			// Take only the first element of each /.
+			for (int i = 0; i < 3; ++i)
+			{
+				std::string word = line.substr(0, line.find("/"));
+				//std::cout << std::stoi(word) << std::endl;
+				t.vertices[i] = &vlist[std::stoi(word) - 1];
+				line.erase(0, line.find(" ") + 1);
+			}
+			t.index = tlist.size();
+			tlist.push_back(t);
+		}
+
+		std::getline(f, line);
+	}
+
+	std::cout << vlist.size() << std::endl;
+	std::cout << tlist.size() << std::endl;
+
+	Corner c;
+	clist = std::vector<Corner>(3 * tlist.size(), c);
+	center = glm::dvec3(0.0, 0.0, 0.0);
 }
-*/
 Polyhedron::Polyhedron(std::string file)
 {
 	vlist.reserve(40000);
@@ -394,7 +461,7 @@ void Polyhedron::OrderVertexToTrianglePointers(Vert v)
 	// Now walk around in the forward direction and place them in order.
 	t = v.triangles[0];
 	int count = 0;
-
+	
 	for (int i = 0; i < v.numberOfTriangles; ++i)
 	{
 		// Find reference to v in t.

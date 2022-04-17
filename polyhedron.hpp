@@ -16,6 +16,7 @@ public:
 
 	// Create a polyhedron from reading in a .ply file.
 	Polyhedron(std::string file);
+	Polyhedron(std::string file, int a);
 	//Polyhedron(std::vector<MeshComponent>& meshes);
 	~Polyhedron();
 	/*

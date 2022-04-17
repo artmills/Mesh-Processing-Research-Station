@@ -70,7 +70,7 @@ out vec4 color;
 void main()
 {
 	int WIREFRAME = uWireframe < 1 ? 1 : 0;
-
+	
 	vec4 drawColor = (fHighlight.r > 0) ? fHighlight : fColor;
 	/*
 	if (fHighlight.r > 0)
@@ -78,6 +78,8 @@ void main()
 		fColor = fHighlight;
 	}
 	*/
+
+	//drawColor = vec4(0, 1, 0.2, 1);
 
 	// Normalize:
 	vec3 unitToLight = normalize(fToLight);

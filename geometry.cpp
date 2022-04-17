@@ -266,9 +266,9 @@ void Triangle::ComputeNormalAndArea()
 	glm::dvec3 v1 = glm::dvec3(vertices[0]->x, vertices[0]->y, vertices[0]->z);
 	glm::dvec3 v2 = glm::dvec3(vertices[1]->x, vertices[1]->y, vertices[1]->z);
 	glm::dvec3 v0 = glm::dvec3(vertices[2]->x, vertices[2]->y, vertices[2]->z);
-	this->normal = glm::normalize(glm::cross(v0 - v1, v2 - v1));
-
-
+	//this->normal = glm::normalize(glm::cross(v0 - v1, v2 - v1));
+	this->normal = glm::cross(v0 - v1, v2 - v1);
+	this->normal /= glm::length(this->normal);
 }
 
 

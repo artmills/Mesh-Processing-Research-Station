@@ -26,9 +26,10 @@
 #include "meshanalysis.hpp"
 #include "subdivision.hpp"
 #include "meshfactory.hpp"
-#include "view.hpp"
 #include "mousepicker.hpp"
 #include "camera.hpp"
+#include "perlinnoise.hpp"
+#include "terrainfactory.hpp"
 
 
 
@@ -63,7 +64,6 @@ int	activeMouseButton;
 float zoomScale;
 int	mouseX, mouseY;
 float rotationX, rotationY;
-MousePicker mousePicker;
 
 
 
@@ -109,8 +109,13 @@ short ReadShort( FILE * );
 /**********************************************************************************/
 /**********************************************************************************/
 void InitializeShadows(int width, int height);
+Polyhedron* SubdivideMesh(Polyhedron* p, int n);
+void LoadMeshFromFile(int subdivisions, int meshIndex);
+void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex);
 
-
+std::vector<Vertex> ComputeTerrainVertices(int xNumTiles, int zNumTiles, float xTileSize, float yTileSize, int octaves, float persistence, float lacunarity);
+std::vector<uint> TriangulateVertices(std::vector<Vertex>& vertices, float xNumTiles, float zNumTiles);
+void ComputeMeshNormals(std::vector<Vertex>& vertices, int xNumTiles, int zNumTiles, float xTileSize, float zTileSize);
 
 
 /*********************************************************************************/
@@ -123,6 +128,10 @@ void InitializeShadows(int width, int height);
 MeshComponent mesh;
 std::vector<MeshComponent> meshes;
 
+// Mesh selection:
+std::vector<std::vector<MeshComponent>> meshList;
+uint activeMesh = 0;
+
 // Shaders:
 BasicShader shader;
 ShadowShader shadowShader;
@@ -133,12 +142,9 @@ glm::mat4 lightPerspectiveMatrix;
 glm::mat4 viewMatrix;
 glm::mat4 modelViewProjectionMatrix;
 float near = 0.1f;
-float far = 100.0f;
+float far = 1000.0f;
 
 // View properties:
-View cameraView;
-glm::vec3 eyePosition;
-glm::vec3 eyeDirection;
 glm::vec3 lightPosition;
 glm::vec3 lightEye;
 bool viewFromSun = false;
@@ -151,6 +157,7 @@ GLuint textureHandle;
 const float AMBIENT = 1.0f;
 const float DIFFUSE = 0.0f;
 const float SPECULAR = 0.0f;
+
 /*
 const float AMBIENT = 0.6f;
 const float DIFFUSE = 0.3f;
@@ -172,7 +179,9 @@ float currentTime = 0;
 #define MS_IN_THE_ANIMATION_CYCLE 10000
 
 // User input:
+MousePicker mousePicker;
 bool selectTriangle = false;
+bool lockCamera = true;
 
 
 /*********************************************************************************/
@@ -186,7 +195,7 @@ int main(int argc, char* argv[])
 {
 	// Initialize GLUT:
 	glutInit(&argc, argv);
-	glutSetKeyRepeat(GLUT_KEY_REPEAT_OFF);
+	//glutSetKeyRepeat(GLUT_KEY_REPEAT_OFF);
 	std::cout << "***** INITIALIZED GLUT. *****" << std::endl;
 	std::cout << std::endl;
 
@@ -221,6 +230,149 @@ int main(int argc, char* argv[])
 }
 
 
+std::vector<Vertex> ComputeTerrainVertices(int xNumTiles, int zNumTiles, float xTileSize, float zTileSize, int octaves, float persistence, float lacunarity)
+{
+	PerlinNoise pn;
+	float noiseAmplitude = 1.0f;
+	float noiseFactor = 1.0f;
+	//float noiseAmplitude = 80.0f;
+	//float noiseFactor = 5.27f;
+
+	// Biomes:
+	//GridComponent biomeMap(xNumTiles + 1, zNumTiles + 1);
+	//TerrainFactory::GenerateBiomes(biomeMap, 15);
+	//std::vector<std::vector<float>> heightMap = TerrainFactory::GetHeightMap(biomeMap, xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence);
+	//heightMap = TerrainFactory::SmoothHeightMap(heightMap, biomeMap, 6, xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence);
+
+	glm::vec4 color;
+	glm::vec4 groundColor1(0.3f, 0.44f, 0.0f, 1.0f);
+	glm::vec4 groundColor2(0.38f, 0.48f, 0.0f, 1.0f);
+	glm::vec4 stoneColor(0.6f, 0.6f, 0.6f, 1.0f);
+	glm::vec4 mountainColor(1, 1, 1, 1);
+	float mountainHeight = 18.0f;
+	float groundHeight = 1;
+
+	std::vector<Vertex> vertices;
+
+	float width = xNumTiles * xTileSize;
+	float height = zNumTiles * zTileSize;
+
+	float min = 1000;
+	float max = -1000;
+
+	fMap heightMap = TerrainFactory::GetHeightMap(xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence, lacunarity);
+
+	// Compute bottom row of vertices:
+	for (int j = 0; j <= zNumTiles; ++j)
+	{
+		for (int i = 0; i <= xNumTiles; ++i)
+		{
+			float xCoord = (float)i * xTileSize;
+			float zCoord = (float)j * zTileSize;
+			float yCoord = heightMap[i][j];
+			if (yCoord < min)
+				min = yCoord;
+			if (yCoord > max)
+				max = yCoord;
+
+			if (yCoord >= mountainHeight)
+			{
+				color = mountainColor;
+			}
+			else if (yCoord >= groundHeight)
+			{
+				color = stoneColor;
+			}
+			else
+			{
+				if (i % 2 == 0 && j % 2 == 0)
+					color = groundColor1;
+				else
+					color = groundColor2;
+			}
+
+			Vertex v(xCoord, yCoord, zCoord, color);
+			vertices.push_back(v);
+		}
+	}
+	std::cout << min << " " << max << std::endl;
+
+	return vertices;
+}
+
+// Assumes that the vertices are ordered using the ComputeTerrainVertices() function.
+std::vector<uint> TriangulateVertices(std::vector<Vertex>& vertices, float xNumTiles, float zNumTiles)
+{
+	std::vector<uint> triangles;
+	uint step = xNumTiles + 1;
+	for (uint j = 0; j < vertices.size() - step; j += step)
+	{
+		for (uint i = 0; i < xNumTiles; ++i)
+		{
+			uint botLeft = i + j;
+			uint botRight = botLeft + 1;
+			uint topRight = botRight + step;
+			uint topLeft = botLeft + step;
+
+			triangles.push_back(botLeft);
+			triangles.push_back(botRight);
+			triangles.push_back(topRight);
+			triangles.push_back(botLeft);
+			triangles.push_back(topRight);
+			triangles.push_back(topLeft);
+		}
+	}
+	return triangles;	
+}
+
+void ComputeMeshNormals(std::vector<Vertex>& vertices, int xNumTiles, int zNumTiles, float xTileSize, float zTileSize)
+{
+	uint step = xNumTiles + 1;
+	float yUp = 0;
+	float yUpRight = 0;
+	float yRight = 0;
+	float yDown = 0;
+	float yDownLeft = 0;
+	float yLeft = 0;
+	// Compute a normal vector for each vertex. See https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh .
+	for (int i = 0; i < vertices.size(); ++i)
+	{
+		// Get the adjacent vertex indices:
+		int up = i + step;
+		int upRight = up + 1;
+		int right = i + 1;
+		int down = i - step;
+		int downLeft = down - 1;
+		int left = i - 1;
+
+		// Now get the y-coordinates of the neighboring vertices.
+		if (up >= 0 && up < vertices.size())
+			yUp = vertices[up].y;
+
+		if (upRight >= 0 && upRight < vertices.size())
+			yUpRight = vertices[upRight].y;
+
+		if (right >= 0 && right < vertices.size())
+			yRight = vertices[right].y;
+
+		if (down >= 0 && down < vertices.size())
+			yDown = vertices[down].y;
+
+		if (downLeft >= 0 && downLeft < vertices.size())
+			yDownLeft = vertices[downLeft].y;
+
+		if (left >= 0 && left < vertices.size())
+			yLeft = vertices[left].y;
+
+
+		float xNormal = -(yDown - 2 * yLeft - yDownLeft + 2 * yRight - yUp + yUpRight) / xTileSize;
+		float yNormal = 6;
+		float zNormal = (2 * yDown - yLeft + yDownLeft + yRight - 2 * yUp - yUpRight) / zTileSize;
+
+		glm::vec3 normal = glm::normalize(glm::vec3(xNormal, yNormal, zNormal));
+		vertices[i].setNormal(normal.x, normal.y, normal.z);
+	}
+}
 
 /*********************************************************************************/
 /*********************************************************************************/
@@ -287,6 +439,45 @@ Polyhedron* SubdivideMesh(Polyhedron* p, int n)
 	return loops.back();
 }
 
+void LoadMeshFromFile(int subdivisions, int meshIndex)
+{
+	Polyhedron* p = new Polyhedron("./tempmodels/bunny1.ply");
+	//Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
+	//Polyhedron* p = new Polyhedron("./tempmodels/Crane/spot/spot_triangulated.obj", 0);
+	p->Initialize();
+
+	Polyhedron* lp = SubdivideMesh(p, subdivisions);
+
+	std::vector<double> horizons = MeshAnalysis::GetHorizonMeasuresDouble(lp->tlist);
+	//std::vector<double> horizons = MeshAnalysis::GetApproximateGaussianCurvatures(lp->tlist);
+	//std::vector<double> horizons = MeshAnalysis::GetOriginalHorizonMeasuresDouble(lp->tlist);
+	mesh = MeshComponent(lp, horizons);
+
+	delete(lp);
+	Loader::PrepareMesh(mesh);
+	//meshes.push_back(mesh);
+	//meshList[0].push_back(meshes);
+	meshList[meshIndex].push_back(mesh);
+}
+
+void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex)
+{
+	mesh = MeshFactory::GetSphereTriangles(1.0f, numPointsPerSide);
+	std::vector<float> triangleHorizons;
+	std::vector<Vertex>& vertices = mesh.getVertices();
+	for (int i = 0; i < vertices.size(); i += 3)
+	{
+		Vertex& v0 = vertices[i];
+		Vertex& v1 = vertices[i+1];
+		Vertex& v2 = vertices[i+2];
+		triangleHorizons.push_back(MeshAnalysis::ComputeHorizonMeasure(v0, v1, v2));
+	}
+	mesh.AssignHorizonMeasureColors(triangleHorizons);
+	Loader::PrepareMesh(mesh);
+	//meshes.push_back(mesh);
+	meshList[meshIndex].push_back(mesh);
+}
+
 
 void InitLists()
 {
@@ -305,47 +496,67 @@ void InitLists()
 	// Mouse picker:
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
+	// Mesh list:
+	meshList.push_back(meshes);
+	meshList.push_back(meshes);
 
-	Polyhedron* p = new Polyhedron("./tempmodels/happy.ply");
-	p->Initialize();
+	camera.position = glm::vec3(0, 0, 3.0f);
+	lightPosition = camera.position;
+	lightEye = camera.GetDirection();
 
-	View cameraView;
-	cameraView.p = p;
+	//Polyhedron* p = new Polyhedron("./tempmodels/Crane/CrumpledDevelopable.obj", 0);
 	/*
-	cameraView.viewPosition = 2.0 * (p->radius + p->center);
-	cameraView.viewTarget = p->center;
-	*/
-	cameraView.viewPosition = glm::dvec3(0, 0, 3);
-	cameraView.viewTarget = glm::dvec3(0, 0, 0);
-
-	eyePosition = (glm::vec3)cameraView.viewPosition;
-	eyeDirection = (glm::vec3)cameraView.viewTarget;
-
-	camera.position = eyePosition;
-	camera.pitch = 0;
-
-	lightPosition = eyePosition;
-	lightEye = eyeDirection;
-
-	int n = 0;
-	Polyhedron* lp = SubdivideMesh(p, n);
-
-	std::vector<double> horizons = MeshAnalysis::GetHorizonMeasuresDouble(lp->tlist);
-	mesh = MeshComponent(lp, horizons);
-
-	delete(lp);
+	Polyhedron* p = new Polyhedron("./tempmodels/bunny1.ply");
+	//Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
+	p->Initialize();
+	mesh = MeshComponent(p);
 	Loader::PrepareMesh(mesh);
 	meshes.push_back(mesh);
-	
-	/*
-	meshes = MeshFactory::GetSphere(1.0f, 100);
-	MeshAnalysis::HorizonMeasureLength(meshes);
-	for (int i = 0; i < meshes.size(); ++i)
-	{
-		Loader::PrepareMesh(meshes[i]);
-	}
 	*/
 
+	LoadMeshFromFile(0, 0);
+	LoadUniformSphereMesh(1, 100, 1);
+	
+	// Terrain Test:
+	/*
+	int xTiles = 1000;
+	int zTiles = 1000;
+	float xTileSize = 1.0f;
+	float zTileSize = 1.0f;
+	int octaves = 4;
+	float persistence = 0.7f;
+	float lacunarity = 2.2f;
+	std::vector<Vertex> vertices = TerrainFactory::GetTerrainVertices(xTiles, zTiles, xTileSize, zTileSize, octaves, persistence, lacunarity);
+	std::vector<uint> triangles = TriangulateVertices(vertices, xTiles, zTiles);
+	ComputeMeshNormals(vertices, xTiles, zTiles, xTileSize, zTileSize);
+	mesh = MeshComponent(vertices, triangles);
+	glm::vec3 middle = glm::vec3((float)xTiles * xTileSize * 0.5f, 0.0f, (float)zTiles * zTileSize * 0.5f);
+	mesh.transform = glm::translate(glm::mat4(1), -middle);
+	*/
+
+	/*
+	// Compute horizon measure of terrain.
+	std::vector<float> triangleHorizons(triangles.size());
+	for (int i = 0; i < triangles.size(); i += 3)
+	{
+		int triangle0 = triangles[i];
+		int triangle1 = triangles[i+1];
+		int triangle2 = triangles[i+2];
+		Vertex& v0 = vertices[triangle0];
+		Vertex& v1 = vertices[triangle1];
+		Vertex& v2 = vertices[triangle2];
+		triangleHorizons[i] = MeshAnalysis::ComputeHorizonMeasure(v0, v1, v2);
+	}
+	std::cout << triangles.size() << std::endl;
+	mesh.AssignHorizonMeasureColors(triangleHorizons);
+	*/
+
+	/*
+	Loader::PrepareMesh(mesh);
+	meshes.push_back(mesh);
+
+	camera.position = glm::vec3(0, 150, middle.z);
+	*/
 }
 
 
@@ -367,9 +578,9 @@ void Display()
 	glViewport(0, 0, windowWidth, windowHeight);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
 	// Camera:
-	glm::mat4 camera = glm::lookAt(eyePosition, eyeDirection, glm::vec3(0.0f, 1.0f, 0.0f));
+	viewMatrix = camera.GetViewMatrix();
+	//glm::mat4 cameraMatrix = glm::lookAt(camera.position, camera.GetDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
 	if (zoomScale < minScaleFactor)
 	{
 		zoomScale = minScaleFactor;
@@ -377,7 +588,7 @@ void Display()
 	glm::mat4 scale = glm::scale(glm::mat4(1), glm::vec3(zoomScale, zoomScale, zoomScale));
 	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
 	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
-	viewMatrix = camera * rotateY * rotateX * scale;
+	viewMatrix = viewMatrix * rotateY * rotateX * scale;
 
 	// Update the mouse picker to the new camera:
 	mousePicker.UpdateViewMatrix(viewMatrix);
@@ -385,6 +596,31 @@ void Display()
 	// Activate the shader:
 	shader.Start();
 
+	//for (int i = 0; i < meshes.size(); ++i)
+	std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
+	for (int i = 0; i < activeMeshList.size(); ++i)
+	{
+		glBindVertexArray(activeMeshList[i].getVAO());
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glEnableVertexAttribArray(2);
+		glEnableVertexAttribArray(3);
+		glEnableVertexAttribArray(4);
+		glEnableVertexAttribArray(5);
+
+		shader.LoadProjectionMatrix(perspectiveMatrix);
+		shader.LoadViewMatrix(viewMatrix);
+		shader.LoadTransformMatrix(activeMeshList[i].transform);
+		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
+		shader.LoadTexture(3);
+		shader.LoadWireframe(enableWireframe);
+		
+		// Draw calls:
+		glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+		//glDrawArrays(GL_TRIANGLES, 0, meshes[i].getCount());
+	}
+	/*
 	for (int i = 0; i < meshes.size(); ++i)
 	{
 		glBindVertexArray(meshes[i].getVAO());
@@ -399,7 +635,7 @@ void Display()
 		shader.LoadProjectionMatrix(perspectiveMatrix);
 		shader.LoadViewMatrix(viewMatrix);
 		shader.LoadTransformMatrix(meshes[i].transform);
-		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, eyePosition);
+		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
 		shader.LoadTexture(3);
 		shader.LoadWireframe(enableWireframe);
 		
@@ -407,6 +643,7 @@ void Display()
 		glDrawElements(GL_TRIANGLES, meshes[i].getCount(), GL_UNSIGNED_INT, nullptr);
 		//glDrawArrays(GL_TRIANGLES, 0, meshes[i].getCount());
 	}
+	*/
 
 	shader.Stop();
 
@@ -500,20 +737,46 @@ void Keyboard(unsigned char c, int x, int y)
 {
 	switch( c )
 	{
+		case 'c':
+			lockCamera = !lockCamera;
+			if (lockCamera)
+				std::cout << "Camera locked." << std::endl;
+			else
+				std::cout << "Camera unlocked." << std::endl;
+			break;
+
 		case 'a':
-			ambient == 0? ambient = AMBIENT : ambient = 0;
+			if (!lockCamera)
+				camera.StepHorizontal(-1);
 			break;
 
 		case 'd':
-			diffuse == 0? diffuse = DIFFUSE : diffuse = 0;
+			if (!lockCamera)
+				camera.StepHorizontal(1);
 			break;
 
 		case 's': 
-			specular == 0? specular = SPECULAR : specular = 0;
+			if (!lockCamera)
+				camera.StepFacingDirection(-1);
 			break;
 
-		case 'v':
-			viewFromSun = !viewFromSun;
+		case 'w': 
+			if (!lockCamera)
+				camera.StepFacingDirection(1);
+			break;
+
+		case 'g': 
+			if (!lockCamera)
+				camera.roll += 0.2f;
+			break;
+
+		case '1':
+			activeMesh = 0;
+			break;
+
+		case '2':
+			if (2 <= meshList.size())
+				activeMesh = 1;
 			break;
 
 		case 'r':
@@ -590,8 +853,9 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 	glm::mat4 scale = glm::scale(glm::mat4(1), glm::vec3(zoomScale, zoomScale, zoomScale));
 	glm::mat4 rotateX = glm::rotate(glm::mat4(1), rotationX, glm::vec3(1.0f, 0.0f, 0.0f));
 	glm::mat4 rotateY = glm::rotate(glm::mat4(1), rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::vec4 cameraEyePosition = glm::vec4(eyePosition.x, eyePosition.y, eyePosition.z, 1);
+	glm::vec4 cameraEyePosition = glm::vec4(camera.position.x, camera.position.y, camera.position.z, 1);
 	cameraEyePosition = glm::inverse(scale) * glm::inverse(rotateX) * glm::inverse(rotateY) * cameraEyePosition;
+	//cameraEyePosition = glm::inverse(rotateX) * glm::inverse(rotateY) * cameraEyePosition;
 	glm::vec3 eyePos = glm::vec4(cameraEyePosition);
 
 	// Check if the ray intersects any triangle from any mesh.
@@ -624,7 +888,7 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 			}
 		}
 	}
-	if (index > -1)
+	if (meshIndex > -1 && index > -1)
 		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
 	/*
 	if (index == -1)
@@ -659,14 +923,20 @@ void MouseButton(int button, int state, int x, int y)
 			b = rightMouseButton;		break;
 
 		case scrollWheelUp:
-			zoomScale += minScaleFactor * scrollWheelClickFactor;
+			if (lockCamera)
+				zoomScale += minScaleFactor * scrollWheelClickFactor;
+			else
+				camera.StepUp(1);
 			// keep object from turning inside-out or disappearing:
 			if (zoomScale < minScaleFactor)
 				zoomScale = minScaleFactor;
 			break;
 
 		case scrollWheelDown:
-			zoomScale -= minScaleFactor * scrollWheelClickFactor;
+			if (lockCamera)
+				zoomScale -= minScaleFactor * scrollWheelClickFactor;
+			else
+				camera.StepUp(-1);
 			// keep object from turning inside-out or disappearing:
 			if (zoomScale < minScaleFactor)
 				zoomScale = minScaleFactor;
@@ -691,7 +961,7 @@ void MouseButton(int button, int state, int x, int y)
 	}
 
 	// Update the mouse picker only on a LEFT CLICK... or else lag everything to death when zooming in/out.
-	// Also, only do this while holding down the selectTriangle key (currently set to T).
+	// Also, only do this while holding down the selectTriangle key (currently set to t).
 	if (selectTriangle && b == leftMouseButton && state == GLUT_DOWN)
 	{
 		mousePicker.setMouseCoordinates(x, y);
@@ -715,8 +985,20 @@ void MouseMotion(int x, int y)
 
 	if( ( activeMouseButton & leftMouseButton ) != 0 )
 	{
-		rotationX += ( rotationFactor*dy );
-		rotationY += ( rotationFactor*dx );
+		if (lockCamera)
+		{
+			rotationX += ( rotationFactor*dy );
+			rotationY += ( rotationFactor*dx );
+		}
+		if (!lockCamera)
+		{
+			camera.pitch += rotationFactor * dy;
+			camera.yaw += rotationFactor * dx;
+		}
+		/*
+		camera.pitch = rotationX;
+		camera.yaw = rotationY;
+		*/
 	}
 
 
@@ -744,6 +1026,9 @@ void Reset()
 	activeMouseButton = 0;
 	zoomScale  = 1.0;
 	rotationX = rotationY = 0.;
+	camera.pitch = 0;
+	camera.yaw = 0;
+	camera.position = glm::vec3(0, 0, 3);
 	ambient = AMBIENT;
 	diffuse = DIFFUSE;
 	specular = SPECULAR;

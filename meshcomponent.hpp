@@ -29,6 +29,9 @@ public:
 	// Triangle-based: duplicate vertices to allow for per-triangle color.
 	MeshComponent(Polyhedron* p, std::vector<double>& triangleHorizon);
 
+	// Assign colors based upon horizon measure.
+	void AssignHorizonMeasureColors(std::vector<float>& triangleHorizon);
+
 	// getters/setters:
 	uint getVAO();
 	uint getVBO();
@@ -49,6 +52,9 @@ public:
 private:
 
 	glm::vec3 InterpolateColor(double min, double mean, double max, double value);
+	glm::vec3 InterpolateColor(float min, float mean, float max, float value);
+	glm::vec3 InterpolateColorPercentage(double min, double mean, double max, double maxDistanceFromMean, double value);
+	glm::vec3 InterpolateColorPercentage(float min, float mean, float max, float maxDistanceFromMean, float value);
 
 	// raw model data:
 	std::vector<Vertex> vertices;
