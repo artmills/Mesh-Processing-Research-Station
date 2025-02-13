@@ -4,235 +4,514 @@
 MeshAnalysis::MeshAnalysis() {}
 MeshAnalysis::~MeshAnalysis() {}
 
-std::vector<double> MeshAnalysis::GetApproximateGaussianCurvatures(std::vector<Triangle>& triangles)
+double MeshAnalysis::ComputeSignedDistortion(Corner& c)
 {
-	std::vector<double> gaussianCurvatures(triangles.size());
-	for (int i = 0; i < triangles.size(); ++i)
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = glm::dvec3(v->x, v->y, v->z);
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	/*
+	for (Triangle* t : star)
+		t->Print();
+
+	std::cout << std::endl;
+	*/
+
+	// Distortion is the signed perimeter of the Gauss map.
+	double distortion = 0;
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
 	{
-		gaussianCurvatures[i] = ComputeApproximateGaussianCurvature(triangles[i]);
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = glm::dvec3(q->x, q->y, q->z) - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+
+		// Distortion.
+		distortion += angle;
 	}
-	return gaussianCurvatures;
+
+	return distortion;
 }
-std::vector<double> MeshAnalysis::GetHorizonMeasuresDouble(std::vector<Triangle>& triangles)
+// Return the edge attached to both triangles.
+Edge* MeshAnalysis::GetEdge(Triangle* t0, Triangle* t1)
 {
-	std::vector<double> horizonMeasures(triangles.size());
-	for (int i = 0; i < triangles.size(); ++i)
+	//t0->Print();
+	//t1->Print();
+	std::vector<Edge*> edges0 = t0->edges;
+	std::vector<Edge*> edges1 = t1->edges;
+	for (Edge* e0 : edges0)
 	{
-		horizonMeasures[i] = ComputeHorizonMeasureDouble(triangles[i]);
+		for (Edge* e1 : edges1)
+		{
+			//std::cout << e0->index << " " << e1->index << std::endl;
+			if (e0->index == e1->index)
+			{
+				//std::cout << "SUCCESS" << std::endl;
+				return e0;
+			}
+		}
 	}
-	return horizonMeasures;
+	std::cout << "FAILURE" << std::endl;
+	return NULL;
 }
-std::vector<double> MeshAnalysis::GetOriginalHorizonMeasuresDouble(std::vector<Triangle>& triangles)
+
+double MeshAnalysis::ComputeGaussianCone(Corner& c)
 {
-	std::vector<double> horizonMeasures(triangles.size());
-	for (int i = 0; i < triangles.size(); ++i)
+	// Get the vertex and its star.
+	Vert* v = c.v;
+	std::vector<Triangle*> star = GetVertexStar(v);
+
+	// The dual cone is the mesh whose faces are spanned by the normal vectors of the vertex.
+	// So the Gaussian curvature is the angle defect of this mesh at the vertex.
+	double total = 0;
+	for (int i = 0; i < star.size() - 1; ++i)
 	{
-		horizonMeasures[i] = ComputeOriginalHorizonMeasureDouble(triangles[i]);
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Gaussian curvature.
+		total += angle;
 	}
-	return horizonMeasures;
+	// Last pair:
+	glm::dvec3 current = star[star.size() - 1]->normal;
+	glm::dvec3 next = star[0]->normal;
+
+	// Angle between normals:
+	double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+	double angle = acos(dot);
+	total += angle;
+
+	total = 2.0 * M_PI - total;
+	return total;
+
+	// Test.
+	//double distortion = ComputeDistortion(c);
+	//return distortion + total;
+
 }
-std::vector<float> MeshAnalysis::GetHorizonMeasures(std::vector<Triangle>& triangles)
+
+double MeshAnalysis::ComputeDistortion(Corner& c)
 {
-	std::vector<float> horizonMeasures(triangles.size());
-	for (int i = 0; i < triangles.size(); ++i)
+	// Get the vertex and its star.
+	Vert* v = c.v;
+	std::vector<Triangle*> star = GetVertexStar(v);
+
+	// Get supplement of the angle between each pair of normal vectors.
+	// This is the dihedral angle at the edge between normal vectors.
+	double distortion = 0;
+
+	for (int i = 0; i < star.size() - 1; ++i)
 	{
-		horizonMeasures[i] = ComputeHorizonMeasure(triangles[i]);
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Distortion.
+		double dihedral = M_PI - angle;
+		distortion += M_PI - dihedral;
 	}
-	return horizonMeasures;
+	// Last angle:
+	// Normals:
+	glm::dvec3 current = star[star.size() - 1]->normal;
+	glm::dvec3 next = star[0]->normal;
+
+	// Angle between normals:
+	double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+	double angle = acos(dot);
+
+	// Distortion.
+	double dihedral = M_PI - angle;
+	distortion += M_PI - dihedral;
+
+	if (distortion < 0)
+		std::cout << "Negative distortion." << std::endl;
+
+	return distortion;
 }
 
 
-float MeshAnalysis::ComputeHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2)
+std::vector<Triangle*> MeshAnalysis::GetVertexStar(Vert* v)
 {
-	return ComputeHorizonArea(v0, v1, v2) / ComputePerimeter(v0, v1, v2);
+	std::vector<Triangle*> star;
+
+	// Bounce around CCW starting at any corner of the vertex.
+	Corner* c = v->c;
+
+	int k = -1;
+	Corner* previous = c;
+	while (k != c->index)
+	{
+		Corner* current = previous->p->o->p;
+		k = current->index;
+		star.push_back(current->t);
+		previous = current;
+
+		//std::cout << current->t->index << " " << 180 * current->angle / M_PI << std::endl;
+	}
+	return star;
 }
-float MeshAnalysis::ComputeOriginalHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2)
+
+
+
+double MeshAnalysis::ComputeHorizonMeasureTest(Corner& c)
 {
-	return ComputeHorizonArea(v0, v1, v2) / ComputeArea(v0, v1, v2);
+	// Start with the mixed area.
+	double mixedArea = ComputeMixedArea(c);
+	if (mixedArea == -1)
+		return 0;
+	
+	// Get the vertex associated with this corner.
+	Vert* v = c.v;
+
+	// Get list of triangle normal vectors in the list of triangles containing the vertex.
+	std::vector<glm::dvec3> normals;
+	for (Triangle* t : v->triangles)
+	{
+		normals.push_back(t->normal);
+	}
+
+	// Compute angles between each pair of normal vectors.
+	double last = glm::clamp(glm::dot(normals[normals.size()-1], normals[0]), -1.0, 1.0);
+	double total = acos(last);
+	for (int i = 0; i < normals.size() - 1; ++i)
+	{
+		double dot = glm::clamp(glm::dot(normals[i], normals[i+1]), -1.0, 1.0);
+		total += acos(dot);
+	}
+
+	// Testing: if the Gaussian curvature is negative, try adding 4pi.
+	return 2.0 * total / mixedArea;
 }
-float MeshAnalysis::ComputeHorizonMeasure(Triangle& t)
+double MeshAnalysis::ComputeHorizonMeasure(Corner& c)
 {
-	return ComputeHorizonArea(t) / ComputePerimeter(t);
+	// Start with the mixed perimeter.
+	double mixedPerimeter = ComputeMixedPerimeter(c);
+	if (mixedPerimeter == -1)
+		return 0;
+	
+	// Get the vertex associated with this corner.
+	Vert* v = c.v;
+
+	// Get list of triangle normal vectors in the list of triangles containing the vertex.
+	std::vector<glm::dvec3> normals;
+	for (Triangle* t : v->triangles)
+	{
+		normals.push_back(t->normal);
+	}
+
+	// Compute angles between each pair of normal vectors.
+	double last = glm::clamp(glm::dot(normals[normals.size()-1], normals[0]), -1.0, 1.0);
+	double total = acos(last);
+	for (int i = 0; i < normals.size() - 1; ++i)
+	{
+		double dot = glm::clamp(glm::dot(normals[i], normals[i+1]), -1.0, 1.0);
+		total += acos(dot);
+	}
+
+	// Testing: if the Gaussian curvature is negative, try adding 4pi.
+	return 2.0 * total / mixedPerimeter;
 }
-double MeshAnalysis::ComputeHorizonMeasureDouble(Triangle& t)
+
+// Based on the paper, compute the ``mixed perimeter'' of the Voronoi area corresponding to the triangle for this corner.
+// See notes for derivation of the arc lengths: use circumcenter and midpoint theorem for triangle segments.
+double MeshAnalysis::ComputeMixedPerimeter(Corner& c)
 {
-	return ComputeHorizonAreaDouble(t) / ComputePerimeterDouble(t);
+	double mixedPerimeter = 0;
+	Vert* v = c.v;
+
+	// Bounce around the vertex using the corner:
+	int k = -1;
+	Corner* previous = &c;
+	while (k != c.index)
+	{
+		// Check if this is a boundary vertex.
+		// If so, set the mixed perimeter to be -1.
+		if (previous->p->o == NULL)
+			return -1;
+
+		Corner* current = previous->p->o->p;
+		k = current->index;
+
+		// If the triangle is obtuse, but the obtuse angle is NOT at this corner:
+		if (current->p->angle > 0.5 * M_PI ||
+			current->n->angle > 0.5 * M_PI)
+		{
+			// The perimeter is then half of the length of the edge opposite the corner.
+			mixedPerimeter += 0.5 * current->e->length;
+		}
+		// If the triangle is obtuse and the angle IS at this corner:
+		else if (current->angle > 0.5 * M_PI)
+		{
+			// The perimeter is then half the sum of the edges containing the vertex.
+			// These edges are opposite the two adjacent corners of the current.
+			mixedPerimeter += 0.5 * (current->p->e->length + current->n->e->length);
+		}
+		// The triangle is not obtuse:
+		else
+		{
+			// Actual Voronoi cell based upon the circumcenter.
+			// First compute circumradius.
+			double pEdgeLength = current->p->e->length;
+			double nEdgeLength = current->n->e->length;
+			double cEdgeLength = current->e->length;
+			double circumRadius = 0.25 * cEdgeLength * pEdgeLength * nEdgeLength / current->t->area;
+
+			// Now compute the two arcs of the Voronoi cell.
+			double pArcLength = std::sqrt(circumRadius * circumRadius - (0.25 * pEdgeLength * pEdgeLength));
+			double nArcLength = std::sqrt(circumRadius * circumRadius - (0.25 * nEdgeLength * nEdgeLength));
+			mixedPerimeter += pArcLength + nArcLength;
+		}
+		previous = current;
+	}
+	return mixedPerimeter;
 }
-double MeshAnalysis::ComputeOriginalHorizonMeasureDouble(Triangle& t)
+
+
+std::vector<double> MeshAnalysis::GetVertexCurvatures(Polyhedron* p, Curvature curv)
 {
-	return ComputeHorizonAreaDouble(t) / t.area;
+	// Assume that curvatures[i] is the curvature of vertices[i].
+	std::vector<double> curvatures(p->vlist.size(), std::numeric_limits<double>::max());
+
+	// Choose the correct curvature function.
+	double (*CurvatureFunction)(Corner&);	
+	if (curv == Curvature::GAUSSIAN)
+		CurvatureFunction = ComputeGaussianCurvature;
+	else if (curv == Curvature::MEAN)
+		CurvatureFunction = ComputeMeanCurvature;
+	else if (curv == Curvature::HORIZON)
+		CurvatureFunction = ComputeHorizonMeasure;
+	else if (curv == Curvature::ORIGINAL)
+		CurvatureFunction = ComputeHorizonMeasureTest;
+	else if (curv == Curvature::DISTORTION)
+		CurvatureFunction = ComputeDistortion;
+	else if (curv == Curvature::CONE)
+		CurvatureFunction = ComputeGaussianCone;
+	else if (curv == Curvature::DISTORTION_SIGNED)
+		CurvatureFunction = ComputeSignedDistortion;
+	else //if (curv == Curvature::MEAN_SIGNED)
+		CurvatureFunction = ComputeSignedMeanCurvature;
+
+	// Go through the corner list and compute the Gaussian curvature of the corresponding vertex.
+	// Skip vertices we have already seen.
+	for (Corner& c : p->clist)
+	{
+		int index = c.v->index;
+
+		// Skip this vertex if we have already given it a value.
+		if (curvatures[index] != std::numeric_limits<double>::max())
+			continue;
+		double curvature = CurvatureFunction(c);
+		/*
+		if (curv == Curvature::GAUSSIAN)
+			curvature = abs(curvature);
+		*/
+		curvatures[index] = curvature;
+	}
+	return curvatures;
 }
-float MeshAnalysis::ComputeApproximateGaussianCurvature(Vertex& v0, Vertex& v1, Vertex& v2)
+
+// See Figure 4 in the paper for the formulas used for mixedArea according to whether or not the triangles are obtuse.
+double MeshAnalysis::ComputeMixedArea(Corner& c)
 {
-	glm::vec3 n0 = v0.getNormal();
-	glm::vec3 n1 = v1.getNormal();
-	glm::vec3 n2 = v2.getNormal();
-	return ComputeSphericalArea(n0, n1, n2) / ComputeArea(v0, v1, v2);
+	double mixedArea = 0;
+	Vert* v = c.v;
+
+	// Bounce around the vertex using the corner:
+	int k = -1;
+	Corner* previous = &c;
+	while (k != c.index)
+	{
+		// Check if this is a boundary vertex.
+		// If so, set the mixed area to be -1.
+		if (previous->p->o == NULL)
+			return -1;
+
+		Corner* adjacent = previous->p->o->p;
+		k = adjacent->index;
+		//std::cout << k << " " << c.index << " " << c.angle << " " << c.v->valence << " " << adjacent->v->index << std::endl;
+
+		// If the triangle is obtuse, but the obtuse angle is NOT at this corner:
+		if (adjacent->p->angle > 0.5 * M_PI ||
+			adjacent->n->angle > 0.5 * M_PI)
+		{
+			//std::cout << "Obtuse triangle at " << c.v->index << std::endl;
+			mixedArea += 0.25 * adjacent->t->area;	
+		}
+		// If the triangle is obtuse and the angle IS at this corner:
+		else if (adjacent->angle > 0.5 * M_PI)
+		{
+			//std::cout << "Obtuse triangle at " << c.v->index << std::endl;
+			mixedArea += 0.5 * adjacent->t->area;
+		}
+		// The triangle is not obtuse:
+		else
+		{
+			double theta = adjacent->n->angle;
+			double phi = previous->p->angle;
+
+			// Doing a little trick: pq is equal to pr.
+			double pq = adjacent->n->e->length;
+			double pr = previous->p->e->length;
+			pq *= pq;
+			pr *= pr;
+
+			double test = (1.0 / tan(theta)) + pr * (1.0 / tan(phi));
+			if (test <= 0)
+			{
+				std::cout << "ERROR: non-positive mixed area. " << std::endl;
+				return -1;
+			}
+			mixedArea += (1.0 / 8.0) * (pq * (1.0 / tan(theta)) + pr * (1.0 / tan(phi)));
+		}
+		previous = adjacent;
+	}
+	return mixedArea;
 }
-double MeshAnalysis::ComputeApproximateGaussianCurvature(Triangle& t)
+
+double MeshAnalysis::ComputeGaussianCurvature(Corner& c)
 {
-	return ComputeSphericalAreaDouble(t.vertices[0]->normal, t.vertices[1]->normal, t.vertices[2]->normal) / ComputeAreaDouble(t);
+	double mixedArea = ComputeMixedArea(c);
+	if (mixedArea == -1)
+		return 0;
+	return ((2.0 * M_PI) - c.v->totalAngle) / mixedArea;
+	//return ((2.0 * M_PI) - c.v->totalAngle);
 }
 
-float MeshAnalysis::ComputeHorizonArea(Vertex& v0, Vertex& v1, Vertex& v2)
+// See Equation 8 in the paper.
+double MeshAnalysis::ComputeSignedMeanCurvature(Corner& c)
 {
-	// Get dot products of the NORMAL vectors.
-	// Clamp between -1 and -1 to avoid precision errors.
-	float d01 = glm::clamp(glm::dot(v0.getNormal(), v1.getNormal()), -1.0f, 1.0f);
-	float d12 = glm::clamp(glm::dot(v1.getNormal(), v2.getNormal()), -1.0f, 1.0f);
-	float d20 = glm::clamp(glm::dot(v2.getNormal(), v0.getNormal()), -1.0f, 1.0f);
+	double mixedArea = ComputeMixedArea(c);
+	
+	// If this is a boundary vertex, just set the mean curvature to be zero:
+	if (mixedArea == -1)
+		return 0;
 
-	// Take 2 times the sum of the inverse cosines.
-	return 2.0f * (acos(d01) + acos(d12) + acos(d20));
+	Vert* v = c.v;
+	glm::dvec3 total = glm::dvec3(0.0, 0.0, 0.0);
+
+	// Bounce around the vertex using the corner:
+	int k = -1;
+	Corner* previous = &c;
+	while (k != c.index)
+	{
+		Corner* adjacent = previous->p->o->p;
+		k = adjacent->index;
+
+		// If the triangle is obtuse, but the obtuse angle is NOT at this corner:
+		double theta = adjacent->n->angle;
+		double phi = adjacent->n->o->angle;
+
+		Vert* w = previous->n->v;
+		glm::dvec3 xi = glm::dvec3(v->x, v->y, v->z);
+		glm::dvec3 xj = glm::dvec3(w->x, w->y, w->z);
+		glm::dvec3 difference = xi - xj;
+
+		total += MeanCurvatureWeight(theta, phi) * difference;
+		previous = adjacent;
+	}
+	//return 0.5 * ((double)1.0 / (2.0 * mixedArea)) * total;
+	glm::dvec3 mcVector = ((double)1.0 / (2.0 * mixedArea)) * total;
+
+	double meanCurvature = 0.5 * glm::length(mcVector);
+	if (glm::dot(v->normal, mcVector) > 0)
+		return meanCurvature;
+	else
+		return -1.0 * meanCurvature;
 }
-double MeshAnalysis::ComputeHorizonAreaDouble(Triangle& t)
+double MeshAnalysis::ComputeMeanCurvature(Corner& c)
 {
-	// Get normal vectors.
-	glm::dvec3 n0 = t.vertices[0]->normal;
-	glm::dvec3 n1 = t.vertices[1]->normal;
-	glm::dvec3 n2 = t.vertices[2]->normal;
+	double mixedArea = ComputeMixedArea(c);
+	
+	// If this is a boundary vertex, just set the mean curvature to be zero:
+	if (mixedArea == -1)
+		return 0;
 
-	// Get dot products of the NORMAL vectors.
-	// Clamp between -1 and -1 to avoid precision errors.
-	double d01 = glm::clamp(glm::dot(n0, n1), -1.0, 1.0);
-	double d12 = glm::clamp(glm::dot(n1, n2), -1.0, 1.0);
-	double d20 = glm::clamp(glm::dot(n2, n0), -1.0, 1.0);
+	Vert* v = c.v;
+	glm::dvec3 total = glm::dvec3(0.0, 0.0, 0.0);
 
-	// Take 2 times the sum of the inverse cosines.
-	return 2.0 * (acos(d01) + acos(d12) + acos(d20));
+	// Bounce around the vertex using the corner:
+	int k = -1;
+	Corner* previous = &c;
+	while (k != c.index)
+	{
+		Corner* adjacent = previous->p->o->p;
+		k = adjacent->index;
+
+		// If the triangle is obtuse, but the obtuse angle is NOT at this corner:
+		double theta = adjacent->n->angle;
+		double phi = adjacent->n->o->angle;
+
+		Vert* w = previous->n->v;
+		glm::dvec3 xi = glm::dvec3(v->x, v->y, v->z);
+		glm::dvec3 xj = glm::dvec3(w->x, w->y, w->z);
+		glm::dvec3 difference = xi - xj;
+
+		total += MeanCurvatureWeight(theta, phi) * difference;
+		previous = adjacent;
+	}
+	//return 0.5 * ((double)1.0 / (2.0 * mixedArea)) * total;
+	glm::dvec3 mcVector = ((double)1.0 / (2.0 * mixedArea)) * total;
+
+	/*
+	double meanCurvature = glm::length(mcVector);
+	if (glm::dot(v->normal, mcVector) > 0)
+		return meanCurvature;
+	else
+		return -1 * meanCurvature;
+		*/
+
+	return 0.5 * glm::length(mcVector);
 }
-float MeshAnalysis::ComputeHorizonArea(Triangle& t)
+
+double MeshAnalysis::MeanCurvatureWeight(double theta, double phi)
 {
-	// Get normal vectors.
-	glm::vec3 n0 = t.vertices[0]->normal;
-	glm::vec3 n1 = t.vertices[1]->normal;
-	glm::vec3 n2 = t.vertices[2]->normal;
-
-	// Get dot products of the NORMAL vectors.
-	// Clamp between -1 and -1 to avoid precision errors.
-	float d01 = glm::clamp(glm::dot(n0, n1), -1.0f, 1.0f);
-	float d12 = glm::clamp(glm::dot(n1, n2), -1.0f, 1.0f);
-	float d20 = glm::clamp(glm::dot(n2, n0), -1.0f, 1.0f);
-
-	// Take 2 times the sum of the inverse cosines.
-	return 2.0f * (acos(d01) + acos(d12) + acos(d20));
+	return (1.0 / tan(theta)) + (1.0 / tan(phi));
 }
-
-float MeshAnalysis::ComputePerimeter(Vertex& v0, Vertex& v1, Vertex& v2)
-{
-	// Get position vectors between the vertices.
-	glm::vec3 p01 = v0.getPosition() - v1.getPosition();
-	glm::vec3 p12 = v1.getPosition() - v2.getPosition();
-	glm::vec3 p20 = v2.getPosition() - v0.getPosition();
-
-	// Get lengths of these vectors.
-	float l01 = glm::length(p01);
-	float l12 = glm::length(p12);
-	float l20 = glm::length(p20);
-
-	// Return the sum.
-	return l01 + l12 + l20;
-}
-double MeshAnalysis::ComputeAreaDouble(Triangle& t)
-{
-	Vert* v0 = t.vertices[0];
-	glm::dvec3 v0Position = glm::dvec3(v0->x, v0->y, v0->z);
-	Vert* v1 = t.vertices[1];
-	glm::dvec3 v1Position = glm::dvec3(v1->x, v1->y, v1->z);
-	Vert* v2 = t.vertices[2];
-	glm::dvec3 v2Position = glm::dvec3(v2->x, v2->y, v2->z);
-
-	glm::dvec3 p1 = v1Position - v0Position;
-	glm::dvec3 p2 = v2Position - v0Position;
-	return 0.5 * glm::length(glm::cross(p1, p2));
-}
-float MeshAnalysis::ComputeArea(Vertex& v0, Vertex& v1, Vertex& v2)
-{
-	glm::vec3 p1 = v1.getPosition() - v0.getPosition();
-	glm::vec3 p2 = v2.getPosition() - v0.getPosition();
-	return 0.5f * glm::length(glm::cross(p1, p2));
-}
-float MeshAnalysis::ComputeSphericalArea(glm::vec3& n0, glm::vec3& n1, glm::vec3& n2)
-{
-	// https://math.stackexchange.com/questions/9819/area-of-a-spherical-triangle
-	// Cross products:
-	glm::vec3 cross01 = glm::cross(n0, n1);
-	cross01 /= glm::length(cross01);
-	glm::vec3 cross12 = glm::cross(n1, n2);
-	cross12 /= glm::length(cross12);
-	glm::vec3 cross20 = glm::cross(n2, n0);
-	cross20 /= glm::length(cross20);
-
-	// Angles:
-	float angle201 = acos(glm::clamp(glm::dot(cross20, -cross01), -1.0f, 1.0f));
-	float angle012 = acos(glm::clamp(glm::dot(cross01, -cross12), -1.0f, 1.0f));
-	float angle120 = acos(glm::clamp(glm::dot(cross12, -cross20), -1.0f, 1.0f));
-
-	// Angle deficit:
-	return angle201 + angle012 + angle120 - (float)M_PI;
-}
-double MeshAnalysis::ComputeSphericalAreaDouble(glm::dvec3& n0, glm::dvec3& n1, glm::dvec3& n2)
-{
-	// https://math.stackexchange.com/questions/9819/area-of-a-spherical-triangle
-	// Cross products:
-	glm::dvec3 cross01 = glm::cross(n0, n1);
-	cross01 /= glm::length(cross01);
-	glm::dvec3 cross12 = glm::cross(n1, n2);
-	cross12 /= glm::length(cross12);
-	glm::dvec3 cross20 = glm::cross(n2, n0);
-	cross20 /= glm::length(cross20);
-
-	// Angles:
-	double angle201 = acos(glm::clamp(glm::dot(cross20, -cross01), -1.0, 1.0));
-	double angle012 = acos(glm::clamp(glm::dot(cross01, -cross12), -1.0, 1.0));
-	double angle120 = acos(glm::clamp(glm::dot(cross12, -cross20), -1.0, 1.0));
-
-	// Angle deficit:
-	return angle201 + angle012 + angle120 - M_PI;
-}
-
-double MeshAnalysis::ComputePerimeterDouble(Triangle& t)
-{
-	// Get the vertices of the triangle.
-	glm::dvec3 v0 = glm::dvec3(t.vertices[0]->x, t.vertices[0]->y, t.vertices[0]->z);
-	glm::dvec3 v1 = glm::dvec3(t.vertices[1]->x, t.vertices[1]->y, t.vertices[1]->z);
-	glm::dvec3 v2 = glm::dvec3(t.vertices[2]->x, t.vertices[2]->y, t.vertices[2]->z);
-
-	// Get position vectors between the vertices.
-	glm::dvec3 p01 = v0 - v1;
-	glm::dvec3 p12 = v1 - v2;
-	glm::dvec3 p20 = v2 - v0;
-
-	// Get lengths of these vectors.
-	double l01 = glm::length(p01);
-	double l12 = glm::length(p12);
-	double l20 = glm::length(p20);
-
-	// Return the sum.
-	return l01 + l12 + l20;
-}
-float MeshAnalysis::ComputePerimeter(Triangle& t)
-{
-	// Get the vertices of the triangle.
-	glm::vec3 v0 = glm::vec3(t.vertices[0]->x, t.vertices[0]->y, t.vertices[0]->z);
-	glm::vec3 v1 = glm::vec3(t.vertices[1]->x, t.vertices[1]->y, t.vertices[1]->z);
-	glm::vec3 v2 = glm::vec3(t.vertices[2]->x, t.vertices[2]->y, t.vertices[2]->z);
-
-	// Get position vectors between the vertices.
-	glm::vec3 p01 = v0 - v1;
-	glm::vec3 p12 = v1 - v2;
-	glm::vec3 p20 = v2 - v0;
-
-	// Get lengths of these vectors.
-	float l01 = glm::length(p01);
-	float l12 = glm::length(p12);
-	float l20 = glm::length(p20);
-
-	// Return the sum.
-	return l01 + l12 + l20;
-}
-
-
 
 
 
@@ -270,6 +549,9 @@ void MeshAnalysis::GetCornerList(Polyhedron* p)
 		c1.v = v1;
 		c2.v = v2;
 		c3.v = v3;
+		v1->c = &c1;
+		v2->c = &c2;
+		v3->c = &c3;
 
 		// Next: c.n.
 		c1.n = &c2;
@@ -351,6 +633,11 @@ void MeshAnalysis::GetValenceDeficit(Polyhedron* p)
 	// Given a corner, check c.p.o.p to get a new corner at the same vertex.
 	// Hop around in this fashion until we get back to where we started.
 
+	// WARNING: KNOWN BUG:
+	// Will crash if the mesh has boundary.
+	// Something goes wrong when bouncing around using the corners if there is boundary.
+	// GO FIX!
+
 	// This method requires that the polyhedron has a corner table.
 	if (p->clist.size() < 1)
 	{
@@ -358,6 +645,58 @@ void MeshAnalysis::GetValenceDeficit(Polyhedron* p)
 	}
 	std::vector<Corner>& corners = p->clist;
 
+	for (Corner c : corners)
+	{
+		// Valence:
+		// Don't bother computing if the valence of this vertex has already been set.
+		if (c.v->valence == 0)
+		{
+			// Bounce around until we get back to where we started OR until we reach a boundary.
+			int index = -1;
+			int valence = 0;
+			bool goPrevious = true;
+			Corner* previous = &c;
+			
+			// Valence computation:
+			while (index != c.index)
+			{
+				// Go the correct direction.
+				Corner* rotate = goPrevious ? previous->p : previous->n;
+
+				// The c.o.p corner will be NULL if the starting triangle was a boundary.
+				// So check this first:
+				if (rotate->o != NULL)
+				{
+					// Still make sure to go the correct direction.
+					Corner* adjacent = goPrevious ? rotate->o->p : rotate->o->n;
+					index = adjacent->index;
+
+					++valence;
+					previous = adjacent;
+				}
+				// NULL (boundary) case:
+				else
+				{
+					// Still increase the valence.
+					++valence;
+
+					// Change the direction. 
+					// But if we already did try going the other direction, we are done.
+					if (goPrevious)
+					{
+						previous = &c;
+						goPrevious = false;
+					}
+					else
+						index = c.index;
+				}
+			}
+			c.v->valence = valence;
+			int deficit = 6 - valence;
+			p->valenceDeficit += deficit;
+		}
+	}
+	/*
 	for (Corner c : corners)
 	{
 		// Valence:
@@ -382,6 +721,7 @@ void MeshAnalysis::GetValenceDeficit(Polyhedron* p)
 			p->valenceDeficit += deficit;
 		}
 	}
+	*/
 }
 
 void MeshAnalysis::ComputeAngle(Corner& c)

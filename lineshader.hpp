@@ -6,18 +6,26 @@
 #include "utilities.hpp"
 #include "shaderprogram.hpp"
 
-/* A simple shader for drawing shadows.
- * This shader runs when rendering the scene from the perspective
- * of the light source.
+/** Implementation of a shader program for rendering curves.
+ *
+ * This shader accounts for the following attributes:
+ *
+ * 1) vec3 vPosition
+ * 2) vec4 vColor
+ *
+ * and the following uniforms:
+ *
+ * 1) mat4 uProjectionMatrix
+ * 2) mat4 uViewMatrix
+ * 3) mat4 uTransformMatrix
  */
-class ShadowShader : public ShaderProgram
+class LineShader : public ShaderProgram
 {
 public:
 
 	/** Initialize the location of the shader source file. */
-	ShadowShader();
-	~ShadowShader();
-
+	LineShader();
+	~LineShader();
 
 	/** Call PrepareShader(). */
 	void Initialize();
@@ -53,6 +61,7 @@ protected:
 	/** Bind the following attributes: 
 	 * 
 	 * 1) 0 -> vPosition.
+	 * 2) 1 -> vColor.
 	 */
 	void BindAttributes();
 

@@ -28,6 +28,7 @@ Vert::Vert(const Vert& v)
 	this->value1 = v.value1;
 	this->minMax = v.minMax;
 	this->saddle = v.saddle;
+	this->c = v.c;
 }
 Vert::Vert(Vert&& v)
 {
@@ -44,6 +45,7 @@ Vert::Vert(Vert&& v)
 	this->value1 = v.value1;
 	this->minMax = v.minMax;
 	this->saddle = v.saddle;
+	this->c = v.c;
 }
 Vert& Vert::operator=(Vert&& v)
 {
@@ -60,6 +62,7 @@ Vert& Vert::operator=(Vert&& v)
 	this->value1 = v.value1;
 	this->minMax = v.minMax;
 	this->saddle = v.saddle;
+	this->c = v.c;
 	return *this;
 }
 

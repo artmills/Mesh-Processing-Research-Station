@@ -1,4 +1,5 @@
 #include "meshcomponent.hpp"
+#include <limits>
 
 MeshComponent::MeshComponent()
 {
@@ -19,262 +20,192 @@ float MeshComponent::InverseLerp(float start, float end, float v)
 {
 	return (v - start) / (end  - start);
 }
-
-// Triangle-based mesh.
-MeshComponent::MeshComponent(Polyhedron *p, std::vector<double>& triangleHorizon)
+glm::vec3 MeshComponent::Lerp(glm::vec3 start, glm::vec3 end, float t)
 {
-	// Go through the Polyhedron's vlist and tlist and convert them to the correct data.
+	return ((1.0f - t) * start + t * end);
+}
+
+glm::vec4 MeshComponent::InterpolateColor(double min, double max, double mean, double value)
+{
+	glm::vec3 maxColor = glm::vec3(1.0f, 0.0f, 0.0f);
+	glm::vec3 meanColor = glm::vec3(0.0f, 0.8f, 0.0f);
+	glm::vec3 minColor = glm::vec3(0.0f, 0.0f, 1.0f);
+
+	//std::cout << min << " " << max << " " << mean << " " << value << std::endl;
+	
+	glm::vec3 color;
+	if (value > mean)
+	{
+		float percent = (float)InverseLerp(mean, max, value);
+		color = Lerp(meanColor, maxColor, percent);
+	}
+	else if (value < mean)
+	{
+		float percent = (float)InverseLerp(min, mean, value);
+		color = Lerp(minColor, meanColor, percent);
+	}
+
+	return glm::vec4(color, 1.0f);
+}
+
+glm::vec4 MeshComponent::InterpolateSignedColor(double minNegative, double maxPositive, double meanNegative, double meanPositive, double value)
+{
+	// If value > 0, then interpolate between max{0, min} and meanPositive.
+	// If value < 0, then interpolate between meanNegative and min{0, max}.
+	// For values above/below the mean, just set to the max color value.
+	glm::vec3 positive = glm::vec3(1.0f, 0.0f, 0.0f);
+	glm::vec3 zero = glm::vec3(0.0f, 0.8f, 0.0f);
+	glm::vec3 negative = glm::vec3(0.0f, 0.0f, 1.0f);
+	
+	// Also if value > 0, this means that max > 0 also.
+	glm::vec3 color;
+	if (value > 0.0)
+	{
+		// If the value is greater than the mean, just set the color to max.
+		if (value >= meanPositive)
+			color = positive;
+		else
+		{
+			double minBound = (0.0 > minNegative ? 0.0 : minNegative);
+			float percent = (float)(InverseLerp(minBound, meanPositive, value));
+			color = Lerp(positive, zero, percent);
+			//std::cout << value << " " << maxPositive << " " << meanPositive << " " << percent << " " << glm::to_string(color) << std::endl;
+		}
+		return glm::vec4(color, 1.0f);
+	}
+	else if (value < 0.0)
+	{
+		// If the value is less than the mean, just set the color to min.
+		if (value <= meanNegative)
+			color = negative;
+		else
+		{
+			double maxBound = (0.0 < maxPositive ? 0.0 : maxPositive);
+			float percent = (float)(InverseLerp(meanNegative, maxBound, value));
+			percent *= percent;
+			color = Lerp(negative, zero, percent);
+		}
+		return glm::vec4(color, 1.0f);
+	}
+	else
+	{
+		return glm::vec4(zero, 1.0f);
+	}
+}
+
+// Vertex-based mesh coloring.
+MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvature c)
+{
+	// Convert the Polyhedron's vlist and tlist to the correct rendering data.
 	std::vector<Vertex> vertices;
 	std::vector<uint> triangles;
 
-	glm::vec3 color;
-
-	// Compute statistics:
-	double sum = 0;
-	double max = 0;
-	double min = std::numeric_limits<double>::max();
-	for (int i = 0; i < triangleHorizon.size(); ++i)
+	// Compute statistics of the values for coloring.
+	double minNegative = std::numeric_limits<double>::max();
+	double maxPositive = std::numeric_limits<double>::min();
+	double meanNegative = 0;
+	double meanPositive = 0;
+	int countNegative = 0;
+	int countPositive = 0;
+	for (int i = 0; i < values.size(); ++i)
 	{
-		double x = triangleHorizon[i];
-		sum += x;	
-		if (x > max)
+		double value = values[i];
+		if (value < 0)
 		{
-			max = x;
+			meanNegative += value;
+			countNegative += 1;
+			if (value < minNegative)
+				minNegative = value;
 		}
-		if (x < min)
-			min = x;
-	}
-	double mean = sum / (double )triangleHorizon.size();
-
-	double stdSums = 0;
-	for (int i = 0; i < triangleHorizon.size(); ++i)
-	{
-		stdSums += (triangleHorizon[i] - mean) * (triangleHorizon[i] - mean);
-	}
-	double standardDeviation = sqrt((1.0f / (double)triangleHorizon.size()) * stdSums);
-
-	std::cout << "Statistics for: Area(H_V) / Length(V): " << std::endl;
-	std::cout << "The mean is " << mean << ". " << std::endl;
-	std::cout << "The standard deviation is " << standardDeviation << ". " << std::endl;
-	std::cout << "The max is " << max << ". " << std::endl;
-	std::cout << "The min is " << min << ". " << std::endl;
-
-	int divergeCount = 0;
-	double maxDistanceFromMean = max - mean;
-	if (mean - min > maxDistanceFromMean)
-		maxDistanceFromMean = mean - min;
-
-	int count = 0;
-
-	// Get the vertices of each triangle.
-	for (int i = 0; i < p->tlist.size(); ++i)
-	{
-		Triangle& t = p->tlist[i];
-		
-
-		// Look up horizon measure and compare it to the average.
-		double horizon = triangleHorizon[i];
-
-		color = InterpolateColor(min, mean, max, horizon);
-		//color = InterpolateColorPercentage(min, mean, max, maxDistanceFromMean, horizon);
-
-		// Vertices:
-		for (int j = 0; j < 3; ++j)
+		else if (value > 0)
 		{
-			// Create the vertex.
-			Vertex v;
-			Vert* current = t.vertices[j];
-			v.setPosition((float)current->x, (float)current->y, (float)current->z);	
-			v.setColor(color.x, color.y, color.z, 1.0f);
-			v.setNormal((float)current->normal.x, (float)current->normal.y, (float)current->normal.z);
-			v.setTexture(0, 0);
-			v.setHighlightColor(glm::vec4(0, 0, 0, 1));
-
-			// Barycentric coordinate for wireframe shader.
-			glm::vec3 barycentric;
-			if (j == 0)
-				barycentric = glm::vec3(1, 0, 0);
-			else if (j == 1)
-				barycentric = glm::vec3(0, 1, 0);
-			else
-				barycentric = glm::vec3(0, 0, 1);
-			v.setBarycentricCoordinate(barycentric);
-
-			// Add to vertex list and triangle list.
-			triangles.push_back(vertices.size());
-			vertices.push_back(v);
+			meanPositive += value;
+			countPositive += 1;
+			if (value > maxPositive)
+				maxPositive = value;
 		}
 	}
+	meanNegative /= (double)countNegative;
+	meanPositive /= (double)countPositive;
 
-	std::cout << "The number of triangles that diverge are " << divergeCount << std::endl;
-	std::cout << count << std::endl;
+	std::cout << "MEAN NEGATIVE: " << meanNegative << std::endl;
+	std::cout << "MEAN POSITIVE: " << meanPositive << std::endl;
+	std::cout << "MIN NEGATIVE: " << minNegative << std::endl;
+	std::cout << "MAX POSITIVE: " << maxPositive << std::endl;
+
+
+	// Build up list of vertices.
+	for (Vert& current : p->vlist)
+	{
+		// Create the vertex.
+		Vertex v;
+		v.setPosition((float)current.x, (float)current.y, (float)current.z);
+		v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
+		v.setTexture(0, 0);
+		v.setHighlightColor(glm::vec4(0, 0, 0, 1));
+		v.setBarycentricCoordinate(glm::vec3(0, 0, 0));
+
+		int index = current.index;
+		if (c == Curvature::GAUSSIAN || c == Curvature::DISTORTION_SIGNED || c == Curvature::MEAN_SIGNED)
+			v.setColor(InterpolateSignedColor(minNegative, maxPositive, meanNegative, meanPositive, values[index]));
+			//v.setColor(InterpolateColor(0, maxPositive, meanPositive, values[index]));
+		else
+			v.setColor(InterpolateColor(0, maxPositive, meanPositive, values[index]));
+		/*
+		if (values[index] < 0.001f)
+			v.setColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+		else
+			v.setColor(glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+		*/
+
+		vertices.push_back(v);
+	}
+
+	// Stitch together triangles.
+	for (Triangle& t : p->tlist)
+	{
+		triangles.push_back(t.vertices[0]->index);
+		triangles.push_back(t.vertices[1]->index);
+		triangles.push_back(t.vertices[2]->index);
+	}
 
 	this->vertices = vertices;
 	this->triangles = triangles;
 	this->transform = glm::mat4(1);
 }
 
-void MeshComponent::AssignHorizonMeasureColors(std::vector<float>& triangleHorizon)
+// Blind copy.
+MeshComponent::MeshComponent(Polyhedron *p, glm::vec3 color)
 {
-	glm::vec3 color;
+	// Go through the Polyhedron's vlist and tlist and convert them to the correct data.
+	std::vector<Vertex> vertices;
+	std::vector<uint> triangles;
 
-	// Compute statistics:
-	float sum = 0;
-	float max = 0;
-	float min = std::numeric_limits<float>::max();
-	for (int i = 0; i < triangleHorizon.size(); ++i)
+	for (int i = 0; i < p->vlist.size(); ++i)
 	{
-		float x = triangleHorizon[i];
-		sum += x;	
-		if (x > max)
+		Vertex v;
+		Vert& current = p->vlist[i];
+
+		v.setPosition((float)current.x, (float)current.y, (float)current.z);	
+		v.setColor(color.x, color.y, color.z, 1.0f);
+		v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
+		v.setTexture(0, 0);
+		vertices.push_back(v);
+	}
+
+	for (int i = 0; i < p->tlist.size(); ++i)
+	{
+		Triangle& t = p->tlist[i];
+		for (int j = 0; j < 3; ++j)
 		{
-			max = x;
+			triangles.push_back(t.vertices[j]->index);
 		}
-		if (x < min)
-			min = x;
 	}
-	float mean = sum / (float)triangleHorizon.size();
 
-	float stdSums = 0;
-	for (int i = 0; i < triangleHorizon.size(); ++i)
-	{
-		stdSums += (triangleHorizon[i] - mean) * (triangleHorizon[i] - mean);
-	}
-	float standardDeviation = sqrt((1.0f / (float )triangleHorizon.size()) * stdSums);
-
-	std::cout << "Statistics for: Area(H_V) / Length(V): " << std::endl;
-	std::cout << "The mean is " << mean << ". " << std::endl;
-	std::cout << "The standard deviation is " << standardDeviation << ". " << std::endl;
-	std::cout << "The max is " << max << ". " << std::endl;
-	std::cout << "The min is " << min << ". " << std::endl;
-
-	float maxDistanceFromMean = max - mean;
-	if (mean - min > maxDistanceFromMean)
-		maxDistanceFromMean = mean - min;
-
-	// Get the vertices of each triangle.
-	for (int i = 0; i < triangleHorizon.size(); ++i)
-	{
-		// Look up horizon measure and compare it to the average.
-		float horizon = triangleHorizon[i];
-		color = InterpolateColor(min, mean, max, horizon);
-
-		/*
-		float distFromMean = std::abs(horizon - mean);
-		float percent = InverseLerp(0, maxDistanceFromMean, distFromMean);
-		percent = cbrt(percent);
-		color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
-		*/
-
-		vertices[3*i].setColor(color.x, color.y, color.z, 1.0f);
-		vertices[3*i].setBarycentricCoordinate(glm::vec3(1, 0, 0));
-
-		vertices[3*i+1].setColor(color.x, color.y, color.z, 1.0f);
-		vertices[3*i+1].setBarycentricCoordinate(glm::vec3(0, 1, 0));
-
-		vertices[3*i+2].setColor(color.x, color.y, color.z, 1.0f);
-		vertices[3*i+2].setBarycentricCoordinate(glm::vec3(0, 0, 1));
-	}
+	this->vertices = vertices;
+	this->triangles = triangles;
+	this->transform = glm::mat4(1);
 }
-
-
-
-glm::vec3 MeshComponent::InterpolateColorPercentage(float min, float mean, float max, float maxDistanceFromMean, float value)
-{
-	float distFromMean = std::abs(value - mean);
-	float percent = InverseLerp(0, maxDistanceFromMean, distFromMean);
-	percent = cbrt(percent);
-	glm::vec3 color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
-	/*
-	if (horizon > 0.5f * mean && horizon > 1.5f * mean)
-	{
-		color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
-		++count;
-	}
-	else
-		color = glm::vec3(1, 1, 1);
-	*/
-	return color;
-}
-glm::vec3 MeshComponent::InterpolateColorPercentage(double min, double mean, double max, double maxDistanceFromMean, double value)
-{
-	double distFromMean = std::abs(value - mean);
-	double percent = InverseLerp(0, maxDistanceFromMean, distFromMean);
-	percent = cbrt(percent);
-	glm::vec3 color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
-	/*
-	if (horizon > 0.5f * mean && horizon > 1.5f * mean)
-	{
-		color = glm::vec3(1.0f, 1.0f - percent, 1.0f - percent);
-		++count;
-	}
-	else
-		color = glm::vec3(1, 1, 1);
-	*/
-	return color;
-}
-
-glm::vec3 MeshComponent::InterpolateColor(double min, double mean, double max, double value)
-{
-	glm::vec3 color;
-
-	// min <= value < mean:
-	if (value >= min && value < mean)
-	{
-		double percent = InverseLerp(min, mean, value);
-		//percent *= percent * percent;
-		color = glm::vec3(0, percent, 1.0f - percent);
-	}
-	// mean < value <= max:
-	else if (value > mean && value <= max)
-	{
-		double percent = InverseLerp(mean, max, value);
-		percent = cbrt(percent);
-		color = glm::vec3(percent, 1.0f - percent, 0);
-	}
-	// value = mean:
-	else if (value == mean)
-	{
-		color = glm::vec3(0, 1.0f, 0);	
-	}
-	else
-	{
-		color = glm::vec3(1.0f, 1.0f, 1.0f);
-		std::cout << "Error! " << min << " " << mean << " " << max << " " << value << std::endl;
-	}
-	return color;
-}
-glm::vec3 MeshComponent::InterpolateColor(float min, float mean, float max, float value)
-{
-	glm::vec3 color;
-
-	// min <= value < mean:
-	if (value >= min && value < mean)
-	{
-		float percent = InverseLerp(min, mean, value);
-		//percent *= percent * percent;
-		color = glm::vec3(0, percent, 1.0f - percent);
-	}
-	// mean < value <= max:
-	else if (value > mean && value <= max)
-	{
-		float percent = InverseLerp(mean, max, value);
-		percent = cbrt(percent);
-		color = glm::vec3(percent, 1.0f - percent, 0);
-	}
-	// value = mean:
-	else if (value == mean)
-	{
-		color = glm::vec3(0, 1.0f, 0);	
-	}
-	else
-	{
-		color = glm::vec3(1.0f, 1.0f, 1.0f);
-		std::cout << "Error! " << min << " " << mean << " " << max << " " << value << std::endl;
-	}
-	return color;
-}
-
 // Blind copy.
 MeshComponent::MeshComponent(Polyhedron *p)
 {
@@ -338,10 +269,4 @@ std::vector<Vertex>& MeshComponent::getVertices()
 std::vector<uint>& MeshComponent::getTriangles()
 {
 	return triangles;
-}
-
-void MeshComponent::CreateModel(std::vector<Vertex> vertices, std::vector<uint> triangles)
-{
-	this->vertices = vertices;
-	this->triangles = triangles;
 }

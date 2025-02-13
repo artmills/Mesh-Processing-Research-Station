@@ -13,6 +13,7 @@
 #include <GL/glu.h>
 #include "glut.h"
 #include "glm/glm.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
 #include "glm/gtx/intersect.hpp"
@@ -21,7 +22,6 @@
 #include "meshcomponent.hpp"
 #include "loader.hpp"
 #include "basicshader.hpp"
-#include "shadowshader.hpp"
 #include "polyhedron.hpp"
 #include "meshanalysis.hpp"
 #include "subdivision.hpp"
@@ -29,8 +29,9 @@
 #include "mousepicker.hpp"
 #include "camera.hpp"
 #include "perlinnoise.hpp"
-#include "terrainfactory.hpp"
-
+#include "spherical.hpp"
+#include "curvecomponent.hpp"
+#include "lineshader.hpp"
 
 
 
@@ -102,20 +103,28 @@ short ReadShort( FILE * );
 
 
 
-
 /**********************************************************************************/
 /**********************************************************************************/
 /*********************************** PROTOTYPES ***********************************/
 /**********************************************************************************/
 /**********************************************************************************/
+
+// Curvature methods:
+/*
+enum class Curvature
+{
+	HORIZON = 0,
+	MEAN = 1,
+	GAUSSIAN = 2,
+	ORIGINAL = 3
+};
+*/
 void InitializeShadows(int width, int height);
 Polyhedron* SubdivideMesh(Polyhedron* p, int n);
-void LoadMeshFromFile(int subdivisions, int meshIndex);
+void LoadMeshFromFile(std::string fileName, int subdivisions);
+void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, Curvature curvature);
+void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, glm::vec3 color);
 void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex);
-
-std::vector<Vertex> ComputeTerrainVertices(int xNumTiles, int zNumTiles, float xTileSize, float yTileSize, int octaves, float persistence, float lacunarity);
-std::vector<uint> TriangulateVertices(std::vector<Vertex>& vertices, float xNumTiles, float zNumTiles);
-void ComputeMeshNormals(std::vector<Vertex>& vertices, int xNumTiles, int zNumTiles, float xTileSize, float zTileSize);
 
 
 /*********************************************************************************/
@@ -128,13 +137,20 @@ void ComputeMeshNormals(std::vector<Vertex>& vertices, int xNumTiles, int zNumTi
 MeshComponent mesh;
 std::vector<MeshComponent> meshes;
 
+// Curve objects to draw:
+CurveComponent curve;
+CurveComponent dualCurve;
+
 // Mesh selection:
 std::vector<std::vector<MeshComponent>> meshList;
 uint activeMesh = 0;
 
+// Copies of polyhedra.
+Polyhedron* poly;
+
 // Shaders:
 BasicShader shader;
-ShadowShader shadowShader;
+LineShader lineShader;
 
 // Perspective:
 glm::mat4 perspectiveMatrix;
@@ -230,150 +246,6 @@ int main(int argc, char* argv[])
 }
 
 
-std::vector<Vertex> ComputeTerrainVertices(int xNumTiles, int zNumTiles, float xTileSize, float zTileSize, int octaves, float persistence, float lacunarity)
-{
-	PerlinNoise pn;
-	float noiseAmplitude = 1.0f;
-	float noiseFactor = 1.0f;
-	//float noiseAmplitude = 80.0f;
-	//float noiseFactor = 5.27f;
-
-	// Biomes:
-	//GridComponent biomeMap(xNumTiles + 1, zNumTiles + 1);
-	//TerrainFactory::GenerateBiomes(biomeMap, 15);
-	//std::vector<std::vector<float>> heightMap = TerrainFactory::GetHeightMap(biomeMap, xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence);
-	//heightMap = TerrainFactory::SmoothHeightMap(heightMap, biomeMap, 6, xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence);
-
-	glm::vec4 color;
-	glm::vec4 groundColor1(0.3f, 0.44f, 0.0f, 1.0f);
-	glm::vec4 groundColor2(0.38f, 0.48f, 0.0f, 1.0f);
-	glm::vec4 stoneColor(0.6f, 0.6f, 0.6f, 1.0f);
-	glm::vec4 mountainColor(1, 1, 1, 1);
-	float mountainHeight = 18.0f;
-	float groundHeight = 1;
-
-	std::vector<Vertex> vertices;
-
-	float width = xNumTiles * xTileSize;
-	float height = zNumTiles * zTileSize;
-
-	float min = 1000;
-	float max = -1000;
-
-	fMap heightMap = TerrainFactory::GetHeightMap(xNumTiles, zNumTiles, xTileSize, zTileSize, octaves, persistence, lacunarity);
-
-	// Compute bottom row of vertices:
-	for (int j = 0; j <= zNumTiles; ++j)
-	{
-		for (int i = 0; i <= xNumTiles; ++i)
-		{
-			float xCoord = (float)i * xTileSize;
-			float zCoord = (float)j * zTileSize;
-			float yCoord = heightMap[i][j];
-			if (yCoord < min)
-				min = yCoord;
-			if (yCoord > max)
-				max = yCoord;
-
-			if (yCoord >= mountainHeight)
-			{
-				color = mountainColor;
-			}
-			else if (yCoord >= groundHeight)
-			{
-				color = stoneColor;
-			}
-			else
-			{
-				if (i % 2 == 0 && j % 2 == 0)
-					color = groundColor1;
-				else
-					color = groundColor2;
-			}
-
-			Vertex v(xCoord, yCoord, zCoord, color);
-			vertices.push_back(v);
-		}
-	}
-	std::cout << min << " " << max << std::endl;
-
-	return vertices;
-}
-
-// Assumes that the vertices are ordered using the ComputeTerrainVertices() function.
-std::vector<uint> TriangulateVertices(std::vector<Vertex>& vertices, float xNumTiles, float zNumTiles)
-{
-	std::vector<uint> triangles;
-	uint step = xNumTiles + 1;
-	for (uint j = 0; j < vertices.size() - step; j += step)
-	{
-		for (uint i = 0; i < xNumTiles; ++i)
-		{
-			uint botLeft = i + j;
-			uint botRight = botLeft + 1;
-			uint topRight = botRight + step;
-			uint topLeft = botLeft + step;
-
-			triangles.push_back(botLeft);
-			triangles.push_back(botRight);
-			triangles.push_back(topRight);
-			triangles.push_back(botLeft);
-			triangles.push_back(topRight);
-			triangles.push_back(topLeft);
-		}
-	}
-	return triangles;	
-}
-
-void ComputeMeshNormals(std::vector<Vertex>& vertices, int xNumTiles, int zNumTiles, float xTileSize, float zTileSize)
-{
-	uint step = xNumTiles + 1;
-	float yUp = 0;
-	float yUpRight = 0;
-	float yRight = 0;
-	float yDown = 0;
-	float yDownLeft = 0;
-	float yLeft = 0;
-	// Compute a normal vector for each vertex. See https://stackoverflow.com/questions/6656358/calculating-normals-in-a-triangle-mesh .
-	for (int i = 0; i < vertices.size(); ++i)
-	{
-		// Get the adjacent vertex indices:
-		int up = i + step;
-		int upRight = up + 1;
-		int right = i + 1;
-		int down = i - step;
-		int downLeft = down - 1;
-		int left = i - 1;
-
-		// Now get the y-coordinates of the neighboring vertices.
-		if (up >= 0 && up < vertices.size())
-			yUp = vertices[up].y;
-
-		if (upRight >= 0 && upRight < vertices.size())
-			yUpRight = vertices[upRight].y;
-
-		if (right >= 0 && right < vertices.size())
-			yRight = vertices[right].y;
-
-		if (down >= 0 && down < vertices.size())
-			yDown = vertices[down].y;
-
-		if (downLeft >= 0 && downLeft < vertices.size())
-			yDownLeft = vertices[downLeft].y;
-
-		if (left >= 0 && left < vertices.size())
-			yLeft = vertices[left].y;
-
-
-		float xNormal = -(yDown - 2 * yLeft - yDownLeft + 2 * yRight - yUp + yUpRight) / xTileSize;
-		float yNormal = 6;
-		float zNormal = (2 * yDown - yLeft + yDownLeft + yRight - 2 * yUp - yUpRight) / zTileSize;
-
-		glm::vec3 normal = glm::normalize(glm::vec3(xNormal, yNormal, zNormal));
-		vertices[i].setNormal(normal.x, normal.y, normal.z);
-	}
-}
-
 /*********************************************************************************/
 /*********************************************************************************/
 /*********************************** RENDERING ***********************************/
@@ -439,42 +311,89 @@ Polyhedron* SubdivideMesh(Polyhedron* p, int n)
 	return loops.back();
 }
 
-void LoadMeshFromFile(int subdivisions, int meshIndex)
+void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, glm::vec3 color)
 {
-	Polyhedron* p = new Polyhedron("./tempmodels/bunny1.ply");
-	//Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
-	//Polyhedron* p = new Polyhedron("./tempmodels/Crane/spot/spot_triangulated.obj", 0);
+	Polyhedron* p = new Polyhedron(fileName);
 	p->Initialize();
 
 	Polyhedron* lp = SubdivideMesh(p, subdivisions);
 
-	std::vector<double> horizons = MeshAnalysis::GetHorizonMeasuresDouble(lp->tlist);
-	//std::vector<double> horizons = MeshAnalysis::GetApproximateGaussianCurvatures(lp->tlist);
-	//std::vector<double> horizons = MeshAnalysis::GetOriginalHorizonMeasuresDouble(lp->tlist);
-	mesh = MeshComponent(lp, horizons);
+	mesh = MeshComponent(lp, color);
 
 	delete(lp);
+	//poly = lp;
+
 	Loader::PrepareMesh(mesh);
-	//meshes.push_back(mesh);
-	//meshList[0].push_back(meshes);
 	meshList[meshIndex].push_back(mesh);
 }
-
-void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex)
+void LoadMeshFromFile(std::string fileName, int subdivisions)
 {
-	mesh = MeshFactory::GetSphereTriangles(1.0f, numPointsPerSide);
-	std::vector<float> triangleHorizons;
-	std::vector<Vertex>& vertices = mesh.getVertices();
-	for (int i = 0; i < vertices.size(); i += 3)
+	Polyhedron* p = new Polyhedron(fileName);
+	p->Initialize();
+
+	Polyhedron* lp = SubdivideMesh(p, subdivisions);
+
+	std::cout << "**** Computing curvatures. ****" << std::endl;
+
+	std::vector<double> gaussianCurvatures  = MeshAnalysis::GetVertexCurvatures(lp, Curvature::GAUSSIAN);
+	std::cout << "Gaussian curvature. " << std::endl;
+
+	std::vector<double> meanCurvatures	    = MeshAnalysis::GetVertexCurvatures(lp, Curvature::MEAN);
+	std::cout << "Mean curvature. " << std::endl;
+
+	std::vector<double> horizonMeasures     = MeshAnalysis::GetVertexCurvatures(lp, Curvature::HORIZON);
+	std::cout << "Horizon measure. " << std::endl;
+
+	std::vector<double> horizonMeasuresTest = MeshAnalysis::GetVertexCurvatures(lp, Curvature::ORIGINAL);
+	std::cout << "Original horizon measure. " << std::endl;
+
+	std::vector<double> distortion          = MeshAnalysis::GetVertexCurvatures(lp, Curvature::DISTORTION);
+	std::cout << "Distortion. " << std::endl;
+
+	std::vector<double> distortionSigned    = MeshAnalysis::GetVertexCurvatures(lp, Curvature::DISTORTION_SIGNED);
+	std::cout << "Signed distortion. " << std::endl;
+
+	std::vector<double> gaussianCone        = MeshAnalysis::GetVertexCurvatures(lp, Curvature::CONE);
+	std::cout << "Gaussian cone. " << std::endl;
+	
+	std::vector<double> meanSigned			= MeshAnalysis::GetVertexCurvatures(lp, Curvature::MEAN_SIGNED);
+	std::cout << "Signed mean curvature. " << std::endl;
+
+	//meshList[0].push_back(MeshComponent(lp, gaussianCurvatures, Curvature::GAUSSIAN));
+	//meshList[1].push_back(MeshComponent(lp, meanCurvatures, Curvature::MEAN));
+	//meshList[2].push_back(MeshComponent(lp, horizonMeasures, Curvature::HORIZON));
+	//meshList[3].push_back(MeshComponent(lp, horizonMeasuresTest, Curvature::ORIGINAL));
+
+	meshList[0].push_back(MeshComponent(lp, meanCurvatures, Curvature::MEAN));
+	meshList[1].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
+	//meshList[2].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
+	//meshList[3].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
+	meshList[2].push_back(MeshComponent(lp, distortion, Curvature::DISTORTION));
+	meshList[3].push_back(MeshComponent(lp, distortionSigned, Curvature::DISTORTION_SIGNED));
+	//meshList[3].push_back(MeshComponent(lp, horizonMeasuresTest, Curvature::ORIGINAL));
+	
+	//delete(lp);
+	poly = lp;
+
+	for (int i = 0; i < meshList.size() - 1; ++i)
 	{
-		Vertex& v0 = vertices[i];
-		Vertex& v1 = vertices[i+1];
-		Vertex& v2 = vertices[i+2];
-		triangleHorizons.push_back(MeshAnalysis::ComputeHorizonMeasure(v0, v1, v2));
+		Loader::PrepareMesh(meshList[i][0]);
 	}
-	mesh.AssignHorizonMeasureColors(triangleHorizons);
+}
+void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, Curvature curvature)
+{
+	Polyhedron* p = new Polyhedron(fileName);
+	p->Initialize();
+
+	Polyhedron* lp = SubdivideMesh(p, subdivisions);
+
+	std::vector<double> triangleCurvatureData = MeshAnalysis::GetVertexCurvatures(lp, curvature);
+	mesh = MeshComponent(lp, triangleCurvatureData, curvature);
+
+	//delete(lp);
+	poly = lp;
+
 	Loader::PrepareMesh(mesh);
-	//meshes.push_back(mesh);
 	meshList[meshIndex].push_back(mesh);
 }
 
@@ -485,13 +404,12 @@ void InitLists()
 	perspectiveMatrix = glm::perspective(glm::pi<float>() / 3.0f, (float)windowWidth / (float)windowHeight, near, far);
 	lightPerspectiveMatrix = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 500.0f);
 
-	// Test Shader:
+	// Shaders:
 	shader = BasicShader();
 	shader.Initialize();	
 
-	// Shadow Shader:
-	shadowShader = ShadowShader();
-	shadowShader.Initialize();
+	lineShader = LineShader();
+	lineShader.Initialize();
 
 	// Mouse picker:
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
@@ -499,64 +417,18 @@ void InitLists()
 	// Mesh list:
 	meshList.push_back(meshes);
 	meshList.push_back(meshes);
+	meshList.push_back(meshes);
+	meshList.push_back(meshes);
+	meshList.push_back(meshes);
 
 	camera.position = glm::vec3(0, 0, 3.0f);
 	lightPosition = camera.position;
 	lightEye = camera.GetDirection();
 
-	//Polyhedron* p = new Polyhedron("./tempmodels/Crane/CrumpledDevelopable.obj", 0);
-	/*
-	Polyhedron* p = new Polyhedron("./tempmodels/bunny1.ply");
-	//Polyhedron* p = new Polyhedron("./tempmodels/bunny.ply");
-	p->Initialize();
-	mesh = MeshComponent(p);
-	Loader::PrepareMesh(mesh);
-	meshes.push_back(mesh);
-	*/
+	LoadMeshFromFile("./tempmodels/helicoid.ply", 0);
 
-	LoadMeshFromFile(0, 0);
-	LoadUniformSphereMesh(1, 100, 1);
+	LoadMeshFromFile("./tempmodels/sphere.ply", 0, 4, glm::vec3(0, 0.9f, 0.8f));
 	
-	// Terrain Test:
-	/*
-	int xTiles = 1000;
-	int zTiles = 1000;
-	float xTileSize = 1.0f;
-	float zTileSize = 1.0f;
-	int octaves = 4;
-	float persistence = 0.7f;
-	float lacunarity = 2.2f;
-	std::vector<Vertex> vertices = TerrainFactory::GetTerrainVertices(xTiles, zTiles, xTileSize, zTileSize, octaves, persistence, lacunarity);
-	std::vector<uint> triangles = TriangulateVertices(vertices, xTiles, zTiles);
-	ComputeMeshNormals(vertices, xTiles, zTiles, xTileSize, zTileSize);
-	mesh = MeshComponent(vertices, triangles);
-	glm::vec3 middle = glm::vec3((float)xTiles * xTileSize * 0.5f, 0.0f, (float)zTiles * zTileSize * 0.5f);
-	mesh.transform = glm::translate(glm::mat4(1), -middle);
-	*/
-
-	/*
-	// Compute horizon measure of terrain.
-	std::vector<float> triangleHorizons(triangles.size());
-	for (int i = 0; i < triangles.size(); i += 3)
-	{
-		int triangle0 = triangles[i];
-		int triangle1 = triangles[i+1];
-		int triangle2 = triangles[i+2];
-		Vertex& v0 = vertices[triangle0];
-		Vertex& v1 = vertices[triangle1];
-		Vertex& v2 = vertices[triangle2];
-		triangleHorizons[i] = MeshAnalysis::ComputeHorizonMeasure(v0, v1, v2);
-	}
-	std::cout << triangles.size() << std::endl;
-	mesh.AssignHorizonMeasureColors(triangleHorizons);
-	*/
-
-	/*
-	Loader::PrepareMesh(mesh);
-	meshes.push_back(mesh);
-
-	camera.position = glm::vec3(0, 150, middle.z);
-	*/
 }
 
 
@@ -580,7 +452,6 @@ void Display()
 
 	// Camera:
 	viewMatrix = camera.GetViewMatrix();
-	//glm::mat4 cameraMatrix = glm::lookAt(camera.position, camera.GetDirection(), glm::vec3(0.0f, 1.0f, 0.0f));
 	if (zoomScale < minScaleFactor)
 	{
 		zoomScale = minScaleFactor;
@@ -593,59 +464,64 @@ void Display()
 	// Update the mouse picker to the new camera:
 	mousePicker.UpdateViewMatrix(viewMatrix);
 
-	// Activate the shader:
-	shader.Start();
-
-	//for (int i = 0; i < meshes.size(); ++i)
-	std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
-	for (int i = 0; i < activeMeshList.size(); ++i)
+	// Render meshes.
+	if (activeMesh >= 0 && activeMesh < meshList.size())
 	{
-		glBindVertexArray(activeMeshList[i].getVAO());
+		shader.Start();
+		std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
+		for (int i = 0; i < activeMeshList.size(); ++i)
+		{
+			glBindVertexArray(activeMeshList[i].getVAO());
 
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			glEnableVertexAttribArray(2);
+			glEnableVertexAttribArray(3);
+			glEnableVertexAttribArray(4);
+			glEnableVertexAttribArray(5);
+
+			shader.LoadProjectionMatrix(perspectiveMatrix);
+			shader.LoadViewMatrix(viewMatrix);
+			shader.LoadTransformMatrix(activeMeshList[i].transform);
+			shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
+			shader.LoadTexture(3);
+			shader.LoadWireframe(enableWireframe);
+			
+			// Draw calls:
+			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+		}
+		shader.Stop();
+	}
+	
+	// Render curves.
+	if (activeMesh == 4)
+	{
+		// Do not allow the select tool to be used while rendering a curve.
+		selectTriangle = false;
+
+		lineShader.Start();
+
+		glBindVertexArray(curve.getVAO());
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		glEnableVertexAttribArray(4);
-		glEnableVertexAttribArray(5);
+		lineShader.LoadProjectionMatrix(perspectiveMatrix);
+		lineShader.LoadViewMatrix(viewMatrix);
+		lineShader.LoadTransformMatrix(curve.transform);
 
-		shader.LoadProjectionMatrix(perspectiveMatrix);
-		shader.LoadViewMatrix(viewMatrix);
-		shader.LoadTransformMatrix(activeMeshList[i].transform);
-		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
-		shader.LoadTexture(3);
-		shader.LoadWireframe(enableWireframe);
-		
-		// Draw calls:
-		glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
-		//glDrawArrays(GL_TRIANGLES, 0, meshes[i].getCount());
-	}
-	/*
-	for (int i = 0; i < meshes.size(); ++i)
-	{
-		glBindVertexArray(meshes[i].getVAO());
+		glDrawArrays(GL_LINE_STRIP, 0, curve.getCount());
 
+		/*
+		glBindVertexArray(dualCurve.getVAO());
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		glEnableVertexAttribArray(4);
-		glEnableVertexAttribArray(5);
+		lineShader.LoadProjectionMatrix(perspectiveMatrix);
+		lineShader.LoadViewMatrix(viewMatrix);
+		lineShader.LoadTransformMatrix(curve.transform);
+		glDrawArrays(GL_LINE_STRIP, 0, dualCurve.getCount());
+		*/
 
-		shader.LoadProjectionMatrix(perspectiveMatrix);
-		shader.LoadViewMatrix(viewMatrix);
-		shader.LoadTransformMatrix(meshes[i].transform);
-		shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
-		shader.LoadTexture(3);
-		shader.LoadWireframe(enableWireframe);
-		
-		// Draw calls:
-		glDrawElements(GL_TRIANGLES, meshes[i].getCount(), GL_UNSIGNED_INT, nullptr);
-		//glDrawArrays(GL_TRIANGLES, 0, meshes[i].getCount());
+		lineShader.Stop();
 	}
-	*/
-
-	shader.Stop();
 
 
 	// Be sure the graphics buffer has been sent:
@@ -779,6 +655,20 @@ void Keyboard(unsigned char c, int x, int y)
 				activeMesh = 1;
 			break;
 
+		case '3':
+			if (3 <= meshList.size())
+				activeMesh = 2;
+			break;
+
+		case '4':
+			if (4 <= meshList.size())
+				activeMesh = 3;
+			break;
+
+		case '5':
+			activeMesh = 4;
+			break;
+
 		case 'r':
 			Reset();
 			break;
@@ -812,14 +702,14 @@ void Keyboard(unsigned char c, int x, int y)
 	glutPostRedisplay( );
 }
 
-void InfoDumpSelectedTriangle(uint meshIndex, uint triangleIndex, uint v0, uint v1, uint v2)
+void InfoDumpSelectedTriangle(uint activeMeshID, uint meshIndex, uint triangleIndex, uint v0, uint v1, uint v2)
 {
-	Vertex& w0 = meshes[meshIndex].getVertices()[v0];
-	Vertex& w1 = meshes[meshIndex].getVertices()[v1];
-	Vertex& w2 = meshes[meshIndex].getVertices()[v2];
+	Vertex& w0 = meshList[meshIndex][meshIndex].getVertices()[v0];
+	Vertex& w1 = meshList[meshIndex][meshIndex].getVertices()[v1];
+	Vertex& w2 = meshList[meshIndex][meshIndex].getVertices()[v2];
 
-	float perimeter = MeshAnalysis::ComputePerimeter(w0, w1, w2);
-	float horizonArea = MeshAnalysis::ComputeHorizonArea(w0, w1, w2);
+	//float perimeter = MeshAnalysis::ComputePerimeter(w0, w1, w2);
+	//float horizonArea = MeshAnalysis::ComputeHorizonArea(w0, w1, w2);
 
 	std::cout << std::endl;
 	std::cout << "Triangle #" << triangleIndex << " selected on mesh #" << meshIndex << std::endl;
@@ -831,20 +721,17 @@ void InfoDumpSelectedTriangle(uint meshIndex, uint triangleIndex, uint v0, uint 
 	std::cout << glm::to_string(w0.getNormal()) << std::endl;
 	std::cout << glm::to_string(w1.getNormal()) << std::endl;
 	std::cout << glm::to_string(w2.getNormal()) << std::endl;
-	std::cout << "Triangle perimeter: " << perimeter << std::endl;
-	std::cout << "Horizon area: " << horizonArea << std::endl;
-	std::cout << "Horizon measure: " << horizonArea / perimeter << std::endl;;
+	//std::cout << "Triangle perimeter: " << perimeter << std::endl;
+	//std::cout << "Horizon area: " << horizonArea << std::endl;
+	//std::cout << "Horizon measure: " << horizonArea / perimeter << std::endl;;
 	std::cout << std::endl;
 }
 
-void SetHighlight(uint meshID, uint triangleIndex, glm::vec4 color)
+void SetHighlight(uint activeMeshID, uint meshID, uint vertexIndex, glm::vec4 color)
 {
-	MeshComponent& mesh = meshes[meshID];
-	uint v0 = mesh.getTriangles()[triangleIndex + 0];
-	uint v1 = mesh.getTriangles()[triangleIndex + 1];
-	uint v2 = mesh.getTriangles()[triangleIndex + 2];
-	Loader::UpdateHighlight(mesh.getVBO(), v0, v1, v2, color);
-	InfoDumpSelectedTriangle(meshID, triangleIndex, v0, v1, v2);
+	MeshComponent& mesh = meshList[activeMeshID][meshID];
+	Loader::UpdateHighlight(mesh.getVBO(), vertexIndex, color);
+	//InfoDumpSelectedTriangle(activeMeshID, meshID, triangleIndex, v0, v1, v2);
 }
 
 void MouseRayTriangleIntersection(glm::vec3& ray)
@@ -858,16 +745,22 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 	//cameraEyePosition = glm::inverse(rotateX) * glm::inverse(rotateY) * cameraEyePosition;
 	glm::vec3 eyePos = glm::vec4(cameraEyePosition);
 
-	// Check if the ray intersects any triangle from any mesh.
+	// Check if the ray intersects any triangle from the active mesh.
+	// meshIndex is the index of the mesh piece within the active mesh.
+	// index is the triangle index of the found intersection.
 	int meshIndex = -1;
 	int index = -1;
 	glm::vec2 position;
 	float distance;
 	float min = std::numeric_limits<float>::max();
-	for (int j = 0; j < meshes.size(); ++j)
+	glm::vec2 baryIntersect;
+
+	// Check for each mesh within the active mesh list.
+	std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
+	for (int j = 0; j < activeMeshList.size(); ++j)
 	{
-		std::vector<uint>& triangles = mesh.getTriangles();
-		std::vector<Vertex>& vertices = mesh.getVertices();
+		std::vector<uint>& triangles = activeMeshList[j].getTriangles();
+		std::vector<Vertex>& vertices = activeMeshList[j].getVertices();
 		for (int i = 0; i < triangles.size(); i += 3)
 		{
 			// Get the vertices of the triangle.
@@ -884,24 +777,83 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 					meshIndex = j;
 					index = i;
 					min = distance;
+					baryIntersect = position;
 				}
 			}
 		}
 	}
-	if (meshIndex > -1 && index > -1)
-		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
-	/*
+
 	if (index == -1)
 	{
 		std::cout << "No intersection found. " << std::endl;
 	}
 	else
 	{
-		std::cout << "Intersection with triangle at index " << index << std::endl;
-		std::cout << "Highlighting mesh " << meshIndex << std::endl;
-		SetHighlight(meshIndex, index, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
+		//std::cout << "Intersection with triangle at index " << index << std::endl;
+		//std::cout << "Highlighting mesh " << meshIndex << std::endl;
+
+		// Determine which point was closest to the intersection using the barycentric coordinates.
+		// By experiment, the 2D position (b, c) means a + b + c = 1, where a is determined by a = 1 - b - c:
+		// (c, a, b) correspond to the vertices given in order to the glm function.
+		float a = baryIntersect.x;
+		float b = baryIntersect.y;
+		float c = 1.0f - a - b;
+
+		uint selectedVertex;
+		std::vector<uint>& triangles = activeMeshList[meshIndex].getTriangles();
+		if (a > b && a > c)
+			selectedVertex = triangles[index + 1];
+		else if (b > a && b > c)
+			selectedVertex = triangles[index + 2];
+		else
+			selectedVertex = triangles[index + 0];
+
+		std::cout << std::endl;
+		std::cout << "Intersection at vertex " << selectedVertex << " in triangle " << index << std::endl;
+		SetHighlight(activeMesh, meshIndex, selectedVertex, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
+
+		// Get Gauss map.
+		std::vector<Triangle*> star = MeshAnalysis::GetVertexStar(&(poly->vlist[selectedVertex]));
+		std::vector<glm::vec3> gaussMap = Spherical::GetGaussMap(star, 500, 1.001f);
+
+		// Get polar dual to the Gauss map.
+		std::vector<glm::vec3> normals;
+		normals.reserve(star.size());
+		for (Triangle* t : star)
+		{
+			normals.push_back((glm::vec3)t->normal);
+		}
+		std::vector<glm::vec3> dualPolygon = Spherical::GetPolarPolygon(normals);
+		std::vector<glm::vec3> dualGaussMap = Spherical::GetGaussMap(dualPolygon, 500, 1.001f);
+
+		std::cout << "Found " << star.size() << " elements in the vertex star: " << std::endl;
+		for (int i = 0; i < star.size(); ++i)
+		{
+			star[i]->Print();
+		}
+		std::cout << std::endl;
+
+		// Create curve: boundary of the Gauss map of the star of the vertex and the polar dual.
+		std::vector<LineVertex> curveVertices;
+		curveVertices.reserve(gaussMap.size());
+		std::vector<LineVertex> polarVertices;
+		polarVertices.reserve(dualGaussMap.size());
+
+		glm::vec3 gaussColor = glm::vec3(0.0f, 0.0f, 1.0f);
+		glm::vec3 polarColor = glm::vec3(1.0f, 0.0f, 0.0f);
+		for (int i = 0; i < gaussMap.size(); ++i)
+		{
+			curveVertices.push_back(LineVertex(gaussMap[i], gaussColor));
+			polarVertices.push_back(LineVertex(dualGaussMap[i], polarColor));
+		}
+		CurveComponent sphericalImage(curveVertices);
+		CurveComponent polarSphericalImage(polarVertices);
+		curve = sphericalImage;
+		dualCurve = polarSphericalImage;
+
+		Loader::PrepareCurve(curve);
+		Loader::PrepareCurve(dualCurve);
 	}
-	*/
 }
 
 

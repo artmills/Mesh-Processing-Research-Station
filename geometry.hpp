@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
@@ -57,6 +58,9 @@ public:
 
 	// Total angle:
 	double totalAngle = 0.0;
+
+	// One of the corners at this vertex:
+	Corner* c;
 
 	// For Morse design: a function value.
 	double value0 = 0.0;

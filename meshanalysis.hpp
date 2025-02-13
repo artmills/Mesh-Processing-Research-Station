@@ -3,7 +3,10 @@
 #include <cmath>
 #include <limits>
 #include <algorithm>
+#include "utilities.hpp"
 #include "meshcomponent.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/norm.hpp"
 
 // Forward declaration.
 class Polyhedron;
@@ -30,38 +33,42 @@ public:
 	// Compute angle deficit of a polyhedron.
 	void static GetAngleDeficit(Polyhedron* p);
 
-	// Compute perimeter or area of a single triangle.
-	static float ComputePerimeter(Vertex& v0, Vertex& v1, Vertex& v2);
-	static float ComputePerimeter(Triangle& t);
-	static float ComputeArea(Vertex& v0, Vertex& v1, Vertex& v2);
-	static double ComputeAreaDouble(Triangle& t);
-	static double ComputePerimeterDouble(Triangle& t);
-	static double ComputeSphericalAreaDouble(glm::dvec3& n0, glm::dvec3& n1, glm::dvec3& n2);
-	static float ComputeSphericalArea(glm::vec3& n0, glm::vec3& n1, glm::vec3& n2);
+	// Get the star of a vertex, using the corner list to ensure orientation.
+	std::vector<Triangle*> static GetVertexStar(Vert* v);
 
-	// Compute area of the horizon viewer set of a single triangle.
-	static float ComputeHorizonArea(Vertex& v0, Vertex& v1, Vertex& v2);
-	static float ComputeHorizonArea(Triangle& t);
-	static double ComputeHorizonAreaDouble(Triangle& t);
+	/********* VERTEX CURVATURES *********/
+	static std::vector<double> GetVertexCurvatures(Polyhedron* p, Curvature curvature);
 
-	// Compute horizon measure.
-	static float ComputeHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2);
-	static float ComputeOriginalHorizonMeasure(Vertex& v0, Vertex& v1, Vertex& v2);
-	static float ComputeHorizonMeasure(Triangle& t);
-	static double ComputeHorizonMeasureDouble(Triangle& t);
-	static double ComputeOriginalHorizonMeasureDouble(Triangle& t);
+	/********* CURVATURE *********/
+	// Given a corner, compute the area of the Voronoi region containing the vertex corresponding to the corner.
+	static double ComputeMixedArea(Corner& c);
 
-	// Compute approximate Gaussian curvature.
-	static double ComputeApproximateGaussianCurvature(Triangle& t);
-	static float ComputeApproximateGaussianCurvature(Vertex& v0, Vertex& v1, Vertex& v2);
+	// Given a corner, compute the perimeter of the Voronoi region containing the vertex corresponding to the corner.
+	static double ComputeMixedPerimeter(Corner& c);
 
-	// Get the horizon measure of every triangle.
-	static std::vector<float> GetHorizonMeasures(std::vector<Triangle>& triangles);
-	static std::vector<double> GetHorizonMeasuresDouble(std::vector<Triangle>& triangles);
-	static std::vector<double> GetOriginalHorizonMeasuresDouble(std::vector<Triangle>& triangles);
+	// Compute the Gaussian curvature at the vertex.
+	static double ComputeGaussianCurvature(Corner& c);
 
-	// Get the approximate Gaussian curvature of every triangle.
-	static std::vector<double> GetApproximateGaussianCurvatures(std::vector<Triangle>& triangles);
+	// Compute the mean curvature at the vertex.
+	static double ComputeMeanCurvature(Corner& c);
+
+	// Compute the signed mean curvature at the vertex.
+	static double ComputeSignedMeanCurvature(Corner& c);
+
+	// Compute the distortion at the vertex.
+	static double ComputeSignedDistortion(Corner& c);
+
+	// Compute the distortion at the vertex.
+	static double ComputeDistortion(Corner& c);
+	
+	// Compute the Gaussian curvature of the dual cone at the vertex.
+	static double ComputeGaussianCone(Corner& c);
+
+	// Compute the length of the boundary of the Gauss map.
+	static double ComputeHorizonMeasure(Corner& c);
+	static double ComputeHorizonMeasureTest(Corner& c);
+
+	static Edge* GetEdge(Triangle* t0, Triangle* t1);
 
 private:
 
@@ -69,4 +76,6 @@ private:
 	~MeshAnalysis();
 
 	float static InverseLerp(float start, float end, float v);
+	static double MeanCurvatureWeight(double theta, double phi);
+
 };

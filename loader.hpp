@@ -7,6 +7,7 @@
 
 #include "utilities.hpp"
 #include "meshcomponent.hpp"
+#include "curvecomponent.hpp"
 
 /** Static class that loads model data into the GPU and returns a RawModel object with its VAO ID. 
  * 
@@ -21,10 +22,14 @@ public:
 	 * 
 	 * When an entity is created with a mesh, this function should be called on the mesh to register it to the GPU. */
 	static void PrepareMesh(MeshComponent& mesh);
+	static void PrepareCurve(CurveComponent& curve);
 
 	/** Update the highlight color of the three vertices.
 	 * The arguments are the indices of the vertices in the vertex list. */
 	static void UpdateHighlight(uint vao, uint v0, uint v1, uint v2, glm::vec4 color);
+
+	/** Update the highlight color of a single vertex. */
+	static void UpdateHighlight(uint vao, uint v0, glm::vec4 color);
 
 private:
 
@@ -54,6 +59,7 @@ private:
 	 * 2) Colors 4D.
 	 * */
 	static uint AttributeList_StoreData(std::vector<Vertex>& vertices);
+	static uint AttributeList_StoreData(std::vector<LineVertex>& vertices);
 
 
 	Loader();

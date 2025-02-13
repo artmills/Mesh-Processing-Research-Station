@@ -1,58 +1,61 @@
-#include "shadowshader.hpp"
+#include "lineshader.hpp"
 
 // get the shader file for this shader and handle the OpenGL functions to prepare it.
-ShadowShader::ShadowShader() : ShaderProgram()
+LineShader::LineShader() : ShaderProgram()
 {
 	// despite how header files work, referencing a file as a string like this
 	// is done relative to the location of the makefile, I guess.
-	shaderFile = "shadow.shader";
+	shaderFile = "line.shader";
 }
-ShadowShader::~ShadowShader() {}
+LineShader::~LineShader() {}
 
-void ShadowShader::Initialize()
+void LineShader::Initialize()
 {
 	PrepareShader(shaderFile);
 }
 
-// bind position, color, etc.
-void ShadowShader::BindAttributes()
+// bind position and color.
+void LineShader::BindAttributes()
 {
 	BindAttribute(0, "vPosition");
+	BindAttribute(1, "vColor");
 }
 
 // get uniform locations so uniforms can be bound to the correct shader variables.
-void ShadowShader::GetAllUniformLocations()
+void LineShader::GetAllUniformLocations()
 {
-	locationProjectionMatrix = GetUniformLocation("uLightPerspectiveMatrix");
-	locationViewMatrix = GetUniformLocation("uLightViewMatrix");
+	locationProjectionMatrix = GetUniformLocation("uProjectionMatrix");
+	locationViewMatrix = GetUniformLocation("uViewMatrix");
 	locationTransformMatrix = GetUniformLocation("uTransformMatrix");
+
+
 }
 
 // only need one matrix: modelViewProjection = model * view * projection.
-void ShadowShader::LoadProjectionMatrix(glm::mat4& projection)
+void LineShader::LoadProjectionMatrix(glm::mat4& projection)
 {
 	//PrintRowMajor(mvp);
 	LoadUniform(locationProjectionMatrix, projection);
 }
 
 // only need one matrix: modelViewProjection = model * view * projection.
-void ShadowShader::LoadViewMatrix(glm::mat4& view)
+void LineShader::LoadViewMatrix(glm::mat4& view)
 {
 	//PrintRowMajor(mvp);
 	LoadUniform(locationViewMatrix, view);
 }
 
-void ShadowShader::LoadTransformMatrix(glm::mat4& transform)
+void LineShader::LoadTransformMatrix(glm::mat4& transform)
 {
 	//PrintRowMajor(mvp);
 	LoadUniform(locationTransformMatrix, transform);
 }
 
 
-std::string ShadowShader::shaderFile;
+std::string LineShader::shaderFile;
 
 
-void ShadowShader::PrintRowMajor(glm::mat4& matrix)
+void LineShader::PrintRowMajor(glm::mat4& matrix)
 {
 	for (uint i = 0; i < 4; i++)
 	{
