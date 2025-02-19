@@ -230,14 +230,14 @@ glm::dvec3 Subdivision::GetAdjacentLinearCombination(Edge* e)
 	Vert* v = e->vertices[0];
 	Vert* w = e->vertices[1];
 
-	glm::dvec3 vPosition = LOOP_WEIGHT * glm::dvec3(v->x, v->y, v->z);
-	glm::dvec3 wPosition = LOOP_WEIGHT * glm::dvec3(w->x, w->y, w->z);
+	glm::dvec3 vPosition = LOOP_WEIGHT * v->GetPosition();
+	glm::dvec3 wPosition = LOOP_WEIGHT * w->GetPosition();
 	return vPosition + wPosition;
 }
 
 glm::dvec3 Subdivision::GetOppositeLinearCombination(Edge* e)
 {
-	if (e->numberOfTriangles < 2)
+	if (e->isBoundary())
 	{
 		std::cout << "ERROR: GetOppositeLinearCombination(Edge* e) should only be called for non-boundary edges!" << std::endl;
 		exit(-1);
@@ -256,12 +256,12 @@ glm::dvec3 Subdivision::GetOppositeLinearCombination(Edge* e)
 		if (e->Contains(t1->vertices[i]) == -1)
 		{
 			Vert* v1 = t1->vertices[i];
-			v1Position = LOOP_WEIGHT * glm::dvec3(v1->x, v1->y, v1->z);
+			v1Position = LOOP_WEIGHT * v1->GetPosition();
 		}
 		if (e->Contains(t2->vertices[i]) == -1)
 		{
 			Vert* v2 = t2->vertices[i];
-			v2Position = LOOP_WEIGHT * glm::dvec3(v2->x, v2->y, v2->z);
+			v2Position = LOOP_WEIGHT * v2->GetPosition();
 		}
 	}
 
@@ -270,14 +270,14 @@ glm::dvec3 Subdivision::GetOppositeLinearCombination(Edge* e)
 
 glm::dvec3 Subdivision::GetBoundaryLinearCombination(Edge* e)
 {
-	if (e->numberOfTriangles != 1)
+	if (e->isBoundary())
 	{
 		std::cout << "ERROR: GetBoundaryLinearCombination(Edge* e) should only be called for boundary edges!" << std::endl;
 		exit(-1);
 	}
 	const double LOOP_WEIGHT = (double)1.0 / 2.0;
-	glm::dvec3 v1Position = LOOP_WEIGHT * glm::dvec3(e->vertices[0]->x, e->vertices[0]->y, e->vertices[0]->z);
-	glm::dvec3 v2Position = LOOP_WEIGHT * glm::dvec3(e->vertices[1]->x, e->vertices[1]->y, e->vertices[1]->z);
+	glm::dvec3 v1Position = LOOP_WEIGHT * e->vertices[0]->GetPosition();
+	glm::dvec3 v2Position = LOOP_WEIGHT * e->vertices[1]->GetPosition();
 	return v1Position + v2Position;
 }
 
@@ -285,8 +285,8 @@ Vert Subdivision::CreateOddVertex(Edge* e, int index)
 {
 	glm::dvec3 position;
 
-	// Check if the edge is ab oundary or not.
-	if (e->numberOfTriangles == 1)
+	// Check if the edge is a boundary or not.
+	if (e->isBoundary())
 	{
 		position = GetBoundaryLinearCombination(e);
 	}
@@ -322,7 +322,7 @@ std::map<int, Vert*> Subdivision::GetConnectedVertices(Vert* v)
 {
 	std::map<int, Vert*> connectedVertices;
 	// Trace all of the triangles of the vertex v to find the other vertices.
-	for (int i = 0; i < v->numberOfTriangles; ++i)
+	for (int i = 0; i < v->GetNumberOfTriangles(); ++i)
 	{
 		Triangle* t = v->triangles[i];
 		for (int j = 0; j < 3; ++j)
@@ -340,7 +340,7 @@ glm::dvec3 Subdivision::GetAdjacentLinearCombination(Vert* v)
 	int n = v->valence;
 
 	// Loop formula:
-	glm::dvec3 vPosition = glm::dvec3(v->x, v->y, v->z);
+	glm::dvec3 vPosition = v->GetPosition();
 	double scale = 1 - (n * Beta(n));
 	glm::dvec3 newPosition = scale * vPosition;
 
@@ -350,7 +350,7 @@ glm::dvec3 Subdivision::GetAdjacentLinearCombination(Vert* v)
 		if (it->first != v->index)
 		{
 			Vert* w = it->second;
-			glm::dvec3 wPosition = glm::dvec3(w->x, w->y, w->z);
+			glm::dvec3 wPosition = w->GetPosition();
 			newPosition += Beta(n) * wPosition;
 		}
 	}
@@ -363,7 +363,7 @@ glm::dvec3 Subdivision::GetBoundaryLinearCombination(Vert* v)
 	int n = v->valence;
 
 	// Loop formula:
-	glm::dvec3 vPosition = glm::dvec3(v->x, v->y, v->z);
+	glm::dvec3 vPosition = v->GetPosition();
 	double scale = (double)3.0 / 4.0;
 	glm::dvec3 newPosition = scale * vPosition;
 
@@ -373,7 +373,7 @@ glm::dvec3 Subdivision::GetBoundaryLinearCombination(Vert* v)
 		if (it->first != v->index)
 		{
 			Vert* w = it->second;
-			glm::dvec3 wPosition = glm::dvec3(w->x, w->y, w->z);
+			glm::dvec3 wPosition = w->GetPosition();
 			newPosition += (double)1.0 / 8.0 * wPosition;
 		}
 	}

@@ -20,14 +20,9 @@ Vert::Vert(const Vert& v)
 	this->y = v.y;
 	this->z = v.z;
 	this->normal = v.normal;
-	this->numberOfTriangles = v.numberOfTriangles;
 	this->triangles = v.triangles;
 	this->valence = v.valence;
 	this->totalAngle = v.totalAngle;
-	this->value0 = v.value0;
-	this->value1 = v.value1;
-	this->minMax = v.minMax;
-	this->saddle = v.saddle;
 	this->c = v.c;
 }
 Vert::Vert(Vert&& v)
@@ -37,14 +32,9 @@ Vert::Vert(Vert&& v)
 	this->y = v.y;
 	this->z = v.z;
 	this->normal = v.normal;
-	this->numberOfTriangles = v.numberOfTriangles;
 	this->triangles = v.triangles;
 	this->valence = v.valence;
 	this->totalAngle = v.totalAngle;
-	this->value0 = v.value0;
-	this->value1 = v.value1;
-	this->minMax = v.minMax;
-	this->saddle = v.saddle;
 	this->c = v.c;
 }
 Vert& Vert::operator=(Vert&& v)
@@ -54,14 +44,9 @@ Vert& Vert::operator=(Vert&& v)
 	this->y = v.y;
 	this->z = v.z;
 	this->normal = v.normal;
-	this->numberOfTriangles = v.numberOfTriangles;
 	this->triangles = v.triangles;
 	this->valence = v.valence;
 	this->totalAngle = v.totalAngle;
-	this->value0 = v.value0;
-	this->value1 = v.value1;
-	this->minMax = v.minMax;
-	this->saddle = v.saddle;
 	this->c = v.c;
 	return *this;
 }
@@ -71,8 +56,8 @@ void Vert::Print()
 	std::cout << "Vert #" << this->index << ": ";
 	std::cout << "( " << x  << ", " << y << ", " << z;
 	std::cout << " ). ";
-	std::cout << "Attached to " << numberOfTriangles << " triangles: ";
-	for (int i = 0; i < numberOfTriangles; ++i)
+	std::cout << "Attached to " << GetNumberOfTriangles() << " triangles: ";
+	for (int i = 0; i < GetNumberOfTriangles(); ++i)
 	{
 		std::cout << triangles[i]->index << " ";	
 	}
@@ -80,6 +65,16 @@ void Vert::Print()
 	std::cout << "( " << normal.x  << ", " << normal.y << ", " << normal.z;
 	std::cout << " ). ";
 	std::cout << std::endl;
+}
+
+int Vert::GetNumberOfTriangles()
+{
+	return triangles.size();
+}
+
+glm::dvec3 Vert::GetPosition()
+{
+	return glm::dvec3(x, y, z);
 }
 
 Edge::Edge()
@@ -90,25 +85,19 @@ Edge::~Edge() {}
 Edge::Edge(const Edge& e)
 {
 	this->index = e.index;
-	this->length = e.length;
 	this->vertices = e.vertices;
-	this->numberOfTriangles = e.numberOfTriangles;
 	this->triangles = e.triangles;
 }
 Edge::Edge(Edge&& e)
 {
 	this->index = e.index;
-	this->length = e.length;
 	this->vertices = e.vertices;
-	this->numberOfTriangles = e.numberOfTriangles;
 	this->triangles = e.triangles;
 }
 Edge& Edge::operator=(Edge&& e)
 {
 	this->index = e.index;
-	this->length = e.length;
 	this->vertices = e.vertices;
-	this->numberOfTriangles = e.numberOfTriangles;
 	this->triangles = e.triangles;
 	return *this;
 }
@@ -116,14 +105,14 @@ Edge& Edge::operator=(Edge&& e)
 void Edge::Print()
 {
 	std::cout << "Edge #" << index << ": ";
-	std::cout << "Length: " << length << "; ";
+	std::cout << "Length: " << GetLength() << "; ";
 	std::cout << "Attached to vertices: ";
 	for (int i = 0; i < 2; ++i)
 	{
 		if (vertices[i])
 			std::cout << vertices[i]->index << " ";	
 	}
-	std::cout << ". Attached to " << numberOfTriangles << " triangles: ";
+	std::cout << ". Attached to " << triangles.size() << " triangles: ";
 	for (int i = 0; i < 2; ++i)
 	{
 		if (triangles[i] != NULL)
@@ -134,24 +123,21 @@ void Edge::Print()
 
 bool Edge::isBoundary()
 {
-	return (numberOfTriangles == 1);
+	return (triangles.size() == 1);
 }
 
 Triangle* Edge::GetOtherTriangle(Triangle* t)
 {
-	if (numberOfTriangles < 2)
+	if (isBoundary())
 	{
 		return NULL;
 	}
 	if (t->index == triangles[0]->index)
-	{
 		return triangles[1];
-	}
-	else
-	{
+	else if (t->index == triangles[1]->index)
 		return triangles[0];
-	}
-
+	else
+		return NULL;
 }
 
 Vert* Edge::GetOtherVertex(Vert* v)
@@ -170,11 +156,11 @@ Vert* Edge::GetOtherVertex(Vert* v)
 	}
 }
 
-void Edge::ComputeLength()
+double Edge::GetLength()
 {
-	glm::dvec3 v0 = glm::dvec3(vertices[0]->x, vertices[0]->y, vertices[0]->z);
-	glm::dvec3 v1 = glm::dvec3(vertices[1]->x, vertices[1]->y, vertices[1]->z);
-	length = glm::length(v1 - v0);	
+	glm::dvec3 v0 = vertices[0]->GetPosition();
+	glm::dvec3 v1 = vertices[1]->GetPosition();
+	return glm::length(v1 - v0);	
 }
 
 int Edge::Contains(Vert* v)
@@ -258,12 +244,12 @@ int Triangle::Contains(Vert* v)
 
 void Triangle::ComputeNormalAndArea()
 {
-	double halfPerimeter = 0.5 * (edges[0]->length + edges[1]->length + edges[2]->length);
+	double halfPerimeter = 0.5 * (edges[0]->GetLength() + edges[1]->GetLength() + edges[2]->GetLength());
 
 	this->area = sqrt(halfPerimeter 
-			* (halfPerimeter - edges[0]->length)
-			* (halfPerimeter - edges[1]->length)
-			* (halfPerimeter - edges[2]->length)
+			* (halfPerimeter - edges[0]->GetLength())
+			* (halfPerimeter - edges[1]->GetLength())
+			* (halfPerimeter - edges[2]->GetLength())
 			);
 
 	glm::dvec3 v1 = glm::dvec3(vertices[0]->x, vertices[0]->y, vertices[0]->z);

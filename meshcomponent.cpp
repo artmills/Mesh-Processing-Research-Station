@@ -128,10 +128,12 @@ MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvatu
 	meanNegative /= (double)countNegative;
 	meanPositive /= (double)countPositive;
 
+	/*
 	std::cout << "MEAN NEGATIVE: " << meanNegative << std::endl;
 	std::cout << "MEAN POSITIVE: " << meanPositive << std::endl;
 	std::cout << "MIN NEGATIVE: " << minNegative << std::endl;
 	std::cout << "MAX POSITIVE: " << maxPositive << std::endl;
+	*/
 
 
 	// Build up list of vertices.

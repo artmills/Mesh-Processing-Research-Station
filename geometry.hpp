@@ -31,6 +31,7 @@ class Vert
 
 public:
 
+	/*** Constructors ***/
 	Vert();
 	Vert(double x, double y, double z);
 	~Vert();
@@ -38,39 +39,31 @@ public:
 	Vert(Vert&& v);
 	Vert& operator=(Vert&& v);
 
+
+	/*** Methods ***/
+
 	// Info dump this vertex:
 	void Print();
 
-	// ID:
+	// Get number of triangles attached to this vertex.
+	int GetNumberOfTriangles();
+
+	// Get position vector.
+	glm::dvec3 GetPosition();
+
+
+	/*** Fields ***/
+
 	int index = -1;
-
-	// 3D Positions:
 	double x, y, z;
-	
-	// 3D Normal vector:
 	glm::dvec3 normal;
-
-	// Number of triangles attached to this vertex:
-	int numberOfTriangles = 0;
-
-	// Valence:
-	int valence = 0;
-
-	// Total angle:
 	double totalAngle = 0.0;
 
-	// One of the corners at this vertex:
+	// Number of edges attached to the vertex.
+	int valence = 0;
+
+	// One of the corners of the vertex: the others can be found by corner traversal.
 	Corner* c;
-
-	// For Morse design: a function value.
-	double value0 = 0.0;
-	double value1 = 0.0;
-
-	// For Morse analysis: critical point information.
-	int minMax = -1;
-	int saddle = -1;
-
-	// List of triangles attached to this vertex:
 	std::vector<Triangle*> triangles;
 };
 
@@ -81,34 +74,35 @@ class Edge
 
 public:
 
+	/*** Constructors ***/
 	Edge();
 	~Edge();
 	Edge(const Edge& e);
 	Edge(Edge&& e);
 	Edge& operator=(Edge&& e);
 
-	void Print();
 
+	/*** Methods ***/
+	void Print();
+	double GetLength();
+
+	// Return true if there is only one triangle attached to this edge.
 	bool isBoundary();
+
+	// Returns NULL if boundary or given triangle is not attached to this edge.
 	Triangle* GetOtherTriangle(Triangle* t);
+
+	// Returns NULL if given vertex is not attached to this edge.
 	Vert* GetOtherVertex(Vert* v);
-	void ComputeLength();
+
+	// Return 0 or 1 if the given vertex is at index 0 or 1 in the vertex list, or return -1 if the vertex is not attached to the edge.
 	int Contains(Vert* v);
 
 
-	// ID:
+	/*** Fields ***/
+
 	int index = -1;
-
-	// Length:
-	double length = -1.0;
-
-	// List of vertices attached to this edge:
 	std::vector<Vert*> vertices;
-
-	// Number of triangles attached to this edge:
-	int numberOfTriangles = 0;
-
-	// List of triangles attached to this edge:
 	std::vector<Triangle*> triangles;
 };
 
@@ -119,31 +113,29 @@ class Triangle
 
 public:
 
+	/*** Constructors ***/
 	Triangle();
 	~Triangle();
 	Triangle(const Triangle& t);
 	Triangle(Triangle&& t);
 	Triangle& operator=(Triangle&& t);
 
-	// Info dump this triangle:
-	void Print();
 
-	int Contains(Vert* v);
+	/*** Methods ***/
+	void Print();
 	void ComputeNormalAndArea();
+
+	// Returns the index of the vertex in the list of vertices, or -1 if it is not attached to the triangle.
+	int Contains(Vert* v);
 
 	// ID:
 	int index = -1;
-
-	// Normal:
 	glm::dvec3 normal;
 
-	// Area:
+	// Area: keep in memory since it does involve a square root, I guess.
 	double area = -1.0;
 
-	// List of vertices attached to this triangle:
 	std::vector<Vert*> vertices;
-
-	// List of edges attached to this triangle:
 	std::vector<Edge*> edges;
 };
 

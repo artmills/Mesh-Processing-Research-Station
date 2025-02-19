@@ -9,7 +9,7 @@ double MeshAnalysis::ComputeSignedDistortion(Corner& c)
 	// Get the vertex and its star.
 	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
 	Vert* v = c.v;
-	glm::dvec3 vPosition = glm::dvec3(v->x, v->y, v->z);
+	glm::dvec3 vPosition = v->GetPosition();
 	std::vector<Triangle*> star = GetVertexStar(v);
 	star.push_back(star[0]);
 
@@ -46,7 +46,7 @@ double MeshAnalysis::ComputeSignedDistortion(Corner& c)
 		if (e == NULL)
 			std::cout << "OOPS" << std::endl;
 		Vert* q = e->GetOtherVertex(v);
-		glm::dvec3 te = glm::dvec3(q->x, q->y, q->z) - vPosition;
+		glm::dvec3 te = q->GetPosition() - vPosition;
 		if (q->index == v->index)
 			std::cout << "OOPS" << std::endl;
 
@@ -282,23 +282,23 @@ double MeshAnalysis::ComputeMixedPerimeter(Corner& c)
 			current->n->angle > 0.5 * M_PI)
 		{
 			// The perimeter is then half of the length of the edge opposite the corner.
-			mixedPerimeter += 0.5 * current->e->length;
+			mixedPerimeter += 0.5 * current->e->GetLength();
 		}
 		// If the triangle is obtuse and the angle IS at this corner:
 		else if (current->angle > 0.5 * M_PI)
 		{
 			// The perimeter is then half the sum of the edges containing the vertex.
 			// These edges are opposite the two adjacent corners of the current.
-			mixedPerimeter += 0.5 * (current->p->e->length + current->n->e->length);
+			mixedPerimeter += 0.5 * (current->p->e->GetLength() + current->n->e->GetLength());
 		}
 		// The triangle is not obtuse:
 		else
 		{
 			// Actual Voronoi cell based upon the circumcenter.
 			// First compute circumradius.
-			double pEdgeLength = current->p->e->length;
-			double nEdgeLength = current->n->e->length;
-			double cEdgeLength = current->e->length;
+			double pEdgeLength = current->p->e->GetLength();
+			double nEdgeLength = current->n->e->GetLength();
+			double cEdgeLength = current->e->GetLength();
 			double circumRadius = 0.25 * cEdgeLength * pEdgeLength * nEdgeLength / current->t->area;
 
 			// Now compute the two arcs of the Voronoi cell.
@@ -395,8 +395,8 @@ double MeshAnalysis::ComputeMixedArea(Corner& c)
 			double phi = previous->p->angle;
 
 			// Doing a little trick: pq is equal to pr.
-			double pq = adjacent->n->e->length;
-			double pr = previous->p->e->length;
+			double pq = adjacent->n->e->GetLength();
+			double pr = previous->p->e->GetLength();
 			pq *= pq;
 			pr *= pr;
 
@@ -593,7 +593,7 @@ void MeshAnalysis::GetCornerList(Polyhedron* p)
 			Edge* e = c.e;
 
 			// If this edge is attached to only one triangle then there is no opposite corner.
-			if (e->numberOfTriangles > 1)
+			if (!(e->isBoundary()))
 			{
 				// Pick the correct triangle that is NOT equal to the current triangle c.t.	
 				Triangle* s = e->GetOtherTriangle(&t);

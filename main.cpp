@@ -425,7 +425,7 @@ void InitLists()
 	lightPosition = camera.position;
 	lightEye = camera.GetDirection();
 
-	LoadMeshFromFile("./tempmodels/helicoid.ply", 0);
+	LoadMeshFromFile("./tempmodels/happy.ply", 2);
 
 	LoadMeshFromFile("./tempmodels/sphere.ply", 0, 4, glm::vec3(0, 0.9f, 0.8f));
 	

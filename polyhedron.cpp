@@ -284,12 +284,6 @@ void Polyhedron::Initialize()
 		OrderVertexToTrianglePointers(vlist[i]);
 	}
 
-	std::cout << "***** Computing edge lengths ***** " << std::endl;
-	for (int i = 0; i < elist.size(); ++i)
-	{
-		elist[i].ComputeLength();
-	}
-
 	std::cout << "***** Computing bounding sphere ***** " << std::endl;
 	ComputeBoundingSphere();
 
@@ -328,7 +322,6 @@ void Polyhedron::ConnectVerticesToTriangles()
 		{
 			Vert* v = t->vertices[j];
 			v->triangles.push_back(t);
-			v->numberOfTriangles++;
 		}
 	}
 }
@@ -350,7 +343,7 @@ void Polyhedron::CreateEdge(Vert* v0, Vert* v1)
 	// Go through the triangles of the first vertex v0.
 	// If any of these triangles contains the second vertex v1:
 	// add this triangle to the edge's list of triangles.
-	for (int i = 0; i < v0->numberOfTriangles; ++i)
+	for (int i = 0; i < v0->GetNumberOfTriangles(); ++i)
 	{
 		Triangle* t = v0->triangles[i];
 
@@ -361,7 +354,6 @@ void Polyhedron::CreateEdge(Vert* v0, Vert* v1)
 			// Establish this edge as an edge for the triangle list.
 			// For consistency's sake, the edge will be always be added as the (j+1)%3 index'ed edge of the triangle, where j is the index of the vertex of the triangle.
 			e->triangles.push_back(t);
-			e->numberOfTriangles++;
 
 			int index0 = t->Contains(v0);
 			if ((k + 1) % 3 == index0)
@@ -424,7 +416,7 @@ void Polyhedron::OrderVertexToTrianglePointers(Vert v)
 
 	// Go backwards (clockwise) around triangles around a vertex to find the boundary.
 	int k = -1;
-	for (int i = 1; i <= v.numberOfTriangles; ++i)
+	for (int i = 1; i <= v.GetNumberOfTriangles(); ++i)
 	{
 		// First, get the index of v in t.
 		k = t->Contains(&v);
@@ -442,7 +434,7 @@ void Polyhedron::OrderVertexToTrianglePointers(Vert v)
 		if (next == NULL)
 		{
 			// Find a reference to t in v.
-			for (int j = 0; j < v.numberOfTriangles; ++j)
+			for (int j = 0; j < v.GetNumberOfTriangles(); ++j)
 			{
 				if (v.triangles[j] == t)
 				{
@@ -462,7 +454,7 @@ void Polyhedron::OrderVertexToTrianglePointers(Vert v)
 	t = v.triangles[0];
 	int count = 0;
 	
-	for (int i = 0; i < v.numberOfTriangles; ++i)
+	for (int i = 0; i < v.GetNumberOfTriangles(); ++i)
 	{
 		// Find reference to v in t.
 		k = t->Contains(&v);
@@ -481,7 +473,7 @@ void Polyhedron::OrderVertexToTrianglePointers(Vert v)
 		 }
 
 		 // Swap the next face into its proper place in the face list.
-		 for (int j = 0; j < v.numberOfTriangles; ++j)
+		 for (int j = 0; j < v.GetNumberOfTriangles(); ++j)
 		 {
 			if (v.triangles[j] == next)
 			{
@@ -552,7 +544,7 @@ void Polyhedron::InterpolateNormals()
 	for (int i = 0; i < vlist.size(); ++i)
 	{
 		Vert& v = vlist[i];
-		for (int j = 0; j < v.numberOfTriangles; ++j)
+		for (int j = 0; j < v.GetNumberOfTriangles(); ++j)
 		{
 			v.normal += v.triangles[j]->normal;
 		}
