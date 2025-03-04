@@ -109,22 +109,13 @@ short ReadShort( FILE * );
 /**********************************************************************************/
 /**********************************************************************************/
 
-// Curvature methods:
-/*
-enum class Curvature
-{
-	HORIZON = 0,
-	MEAN = 1,
-	GAUSSIAN = 2,
-	ORIGINAL = 3
-};
-*/
-void InitializeShadows(int width, int height);
 Polyhedron* SubdivideMesh(Polyhedron* p, int n);
 void LoadMeshFromFile(std::string fileName, int subdivisions);
 void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, Curvature curvature);
+void LoadMeshFromFile(std::string fileName, int subdivisions, std::vector<Curvature> curvature);
 void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, glm::vec3 color);
 void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex);
+std::string ToString(Curvature c);
 
 
 /*********************************************************************************/
@@ -140,10 +131,14 @@ std::vector<MeshComponent> meshes;
 // Curve objects to draw:
 CurveComponent curve;
 CurveComponent dualCurve;
+CurveComponent maxPrincipalDirections;
+CurveComponent minPrincipalDirections;
+uint renderMaxMinPrincipalDirection = 0;
 
 // Mesh selection:
 std::vector<std::vector<MeshComponent>> meshList;
 uint activeMesh = 0;
+std::vector<Curvature> curvatureList;
 
 // Copies of polyhedra.
 Polyhedron* poly;
@@ -294,6 +289,54 @@ void InitGraphics()
 	GLenum err = glewInit( );
 }
 
+std::string ToString(Curvature c)
+{
+	std::string s;
+	switch (c)
+	{
+		case Curvature::HORIZON:
+			s = "Horizon measure";
+			break;
+		case Curvature::MEAN:
+			s = "Unsigned mean curvature";
+			break;
+		case Curvature::GAUSSIAN:
+			s = "Gaussian curvature";
+			break;
+		case Curvature::ORIGINAL:
+			s = "Original horizon measure";
+			break;
+		case Curvature::DISTORTION:
+			s = "Unsigned distortion";
+			break;
+		case Curvature::CONE:
+			s = "Cone curvature";
+			break;
+		case Curvature::DISTORTION_SIGNED:
+			s = "Distortion";
+			break;
+		case Curvature::MEAN_SIGNED:
+			s = "Mean curvature";
+			break;
+		case Curvature::MAX_PRINCIPAL_DISTORTION:
+			s = "Max principal distortion";
+			break;
+		case Curvature::MIN_PRINCIPAL_DISTORTION:
+			s = "Min principal distortion";
+			break;
+		case Curvature::FALSE_GAUSSIAN:
+			s = "False Gaussian curvature";
+			break;
+		case Curvature::FALSE_MEAN:
+			s = "False mean curvature";
+			break;
+		case Curvature::PRINCIPAL_DEVIATION:
+			s = "Principal deviation";
+			break;
+	}
+	return s;
+}
+
 Polyhedron* SubdivideMesh(Polyhedron* p, int n)
 {
 	std::vector<Polyhedron*> loops;
@@ -325,6 +368,33 @@ void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, glm
 
 	Loader::PrepareMesh(mesh);
 	meshList[meshIndex].push_back(mesh);
+}
+void LoadMeshFromFile(std::string fileName, int subdivisions, std::vector<Curvature> curvatures)
+{
+	Polyhedron* p = new Polyhedron(fileName);
+	p->Initialize();
+
+	Polyhedron* lp = SubdivideMesh(p, subdivisions);
+
+	// Currently hard-coded as up to four curvatures that can be displayed.
+	for (int i = 0; i < 4; ++i)
+	{
+		if (i < curvatures.size())
+		{
+			std::vector<double> curvatureData = MeshAnalysis::GetVertexCurvatures(lp, curvatures[i]);
+			meshList[i].push_back(MeshComponent(lp, curvatureData, curvatures[i]));
+			Loader::PrepareMesh(meshList[i][0]);
+		}
+	}
+	
+	poly = lp;
+
+	/*
+	for (int i = 0; i < meshList.size() - 1; ++i)
+	{
+		Loader::PrepareMesh(meshList[i][0]);
+	}
+	*/
 }
 void LoadMeshFromFile(std::string fileName, int subdivisions)
 {
@@ -359,21 +429,27 @@ void LoadMeshFromFile(std::string fileName, int subdivisions)
 	std::vector<double> meanSigned			= MeshAnalysis::GetVertexCurvatures(lp, Curvature::MEAN_SIGNED);
 	std::cout << "Signed mean curvature. " << std::endl;
 
-	//meshList[0].push_back(MeshComponent(lp, gaussianCurvatures, Curvature::GAUSSIAN));
-	//meshList[1].push_back(MeshComponent(lp, meanCurvatures, Curvature::MEAN));
-	//meshList[2].push_back(MeshComponent(lp, horizonMeasures, Curvature::HORIZON));
-	//meshList[3].push_back(MeshComponent(lp, horizonMeasuresTest, Curvature::ORIGINAL));
+	std::vector<double> minPrincipal		= MeshAnalysis::GetVertexCurvatures(lp, Curvature::MIN_PRINCIPAL_DISTORTION);
+	std::cout << "Min principal curvature from distortion. " << std::endl;
 
-	meshList[0].push_back(MeshComponent(lp, meanCurvatures, Curvature::MEAN));
-	meshList[1].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
-	//meshList[2].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
-	//meshList[3].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
-	meshList[2].push_back(MeshComponent(lp, distortion, Curvature::DISTORTION));
-	meshList[3].push_back(MeshComponent(lp, distortionSigned, Curvature::DISTORTION_SIGNED));
-	//meshList[3].push_back(MeshComponent(lp, horizonMeasuresTest, Curvature::ORIGINAL));
+	std::vector<double> maxPrincipal		= MeshAnalysis::GetVertexCurvatures(lp, Curvature::MAX_PRINCIPAL_DISTORTION);
+	std::cout << "Max principal curvature from distortion. " << std::endl;
+
+	std::vector<double> falseGaussian		= MeshAnalysis::GetVertexCurvatures(lp, Curvature::FALSE_GAUSSIAN);
+	std::cout << "Gaussian curvature from distortion. " << std::endl;
+
+	std::vector<double> falseMean			= MeshAnalysis::GetVertexCurvatures(lp, Curvature::FALSE_MEAN);
+	std::cout << "Mean curvature from distortion. " << std::endl;
+
+
+	meshList[0].push_back(MeshComponent(lp, meanSigned, Curvature::MEAN_SIGNED));
+	meshList[1].push_back(MeshComponent(lp, falseMean, Curvature::FALSE_MEAN));
+	//meshList[2].push_back(MeshComponent(lp, distortionSigned, Curvature::DISTORTION_SIGNED));
+	meshList[2].push_back(MeshComponent(lp, falseGaussian, Curvature::FALSE_GAUSSIAN));
+	meshList[3].push_back(MeshComponent(lp, gaussianCurvatures, Curvature::GAUSSIAN));
 	
-	//delete(lp);
 	poly = lp;
+	//delete(lp);
 
 	for (int i = 0; i < meshList.size() - 1; ++i)
 	{
@@ -420,15 +496,57 @@ void InitLists()
 	meshList.push_back(meshes);
 	meshList.push_back(meshes);
 	meshList.push_back(meshes);
+	meshList.push_back(meshes);
 
 	camera.position = glm::vec3(0, 0, 3.0f);
 	lightPosition = camera.position;
 	lightEye = camera.GetDirection();
 
-	LoadMeshFromFile("./tempmodels/happy.ply", 2);
+	std::vector<Curvature> curvatures;
+	curvatures.push_back(Curvature::MEAN_SIGNED);
+	curvatures.push_back(Curvature::FALSE_MEAN);
+	curvatures.push_back(Curvature::DISTORTION_SIGNED);
+	curvatures.push_back(Curvature::HORIZON);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
+	curvatureList = curvatures;
 
-	LoadMeshFromFile("./tempmodels/sphere.ply", 0, 4, glm::vec3(0, 0.9f, 0.8f));
-	
+	std::cout << "Computed curvatures. " << std::endl;
+
+	std::cout << "Attempting to compute principal directions. " << std::endl;
+	std::vector<Edge*> principals = MeshAnalysis::GetPrincipalDirections(poly);
+	std::vector<LineVertex> maxPrincipals;
+	std::vector<LineVertex> minPrincipals;
+	maxPrincipals.reserve(poly->vlist.size() * 2);
+	minPrincipals.reserve(poly->vlist.size() * 2);
+	for (int i = 0; i < principals.size(); i += 2)
+	{
+		// [i] is the max principal direction, [i+1] is the min principal direction.
+		Edge* max = principals[i];
+		Edge* min = principals[i + 1];
+
+		glm::vec3 max0 = (glm::vec3)(max->vertices[0]->GetPosition());
+		glm::vec3 max1 = (glm::vec3)(max->vertices[1]->GetPosition());
+		glm::vec3 min0 = (glm::vec3)(min->vertices[0]->GetPosition());
+		glm::vec3 min1 = (glm::vec3)(min->vertices[1]->GetPosition());
+		maxPrincipals.push_back(LineVertex(max0, glm::vec3(1.0f, 0.0f, 0.0f)));
+		maxPrincipals.push_back(LineVertex(max1, glm::vec3(1.0f, 0.0f, 0.0f)));
+		minPrincipals.push_back(LineVertex(min0, glm::vec3(0.0f, 0.0f, 1.0f)));
+		minPrincipals.push_back(LineVertex(min1, glm::vec3(0.0f, 0.0f, 1.0f)));
+	}
+	std::cout << maxPrincipals.size() << " " << minPrincipals.size() << std::endl;
+	maxPrincipalDirections = CurveComponent(maxPrincipals);
+	minPrincipalDirections = CurveComponent(minPrincipals);
+	Loader::PrepareCurve(maxPrincipalDirections);
+	Loader::PrepareCurve(minPrincipalDirections);
+
+	// Load blank copy of mesh.
+	MeshComponent blank = MeshComponent(poly, glm::vec3(0.9f, 0.9f, 0.9f));
+	Loader::PrepareMesh(blank);
+	std::cout << meshList.size() << std::endl;
+	meshList[4] = std::vector<MeshComponent> { blank };
+
+	// Load sphere for Gauss map visualization.
+	LoadMeshFromFile("./tempmodels/sphere.ply", 0, 5, glm::vec3(0, 0.9f, 0.8f));
 }
 
 
@@ -442,6 +560,9 @@ void Display()
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+	// Line rendering settings.
+	glEnable(GL_LINE_SMOOTH);
 
 
 	/***** SCENE RENDERING *****/
@@ -492,15 +613,19 @@ void Display()
 		}
 		shader.Stop();
 	}
-	
-	// Render curves.
-	if (activeMesh == 4)
+		
+	// Render Gauss map.
+	if (activeMesh == 5)
 	{
-		// Do not allow the select tool to be used while rendering a curve.
+		// Do not allow the select tool to be used while rendering Gauss map.
 		selectTriangle = false;
+
+		// Do not render principal directions
+		renderMaxMinPrincipalDirection = 0;
 
 		lineShader.Start();
 
+		// Render Gauss map.
 		glBindVertexArray(curve.getVAO());
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -510,7 +635,7 @@ void Display()
 
 		glDrawArrays(GL_LINE_STRIP, 0, curve.getCount());
 
-		/*
+		// Render polar dual.
 		glBindVertexArray(dualCurve.getVAO());
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -518,8 +643,57 @@ void Display()
 		lineShader.LoadViewMatrix(viewMatrix);
 		lineShader.LoadTransformMatrix(curve.transform);
 		glDrawArrays(GL_LINE_STRIP, 0, dualCurve.getCount());
-		*/
 
+		lineShader.Stop();
+	}
+
+	// Render principal directions but not if we are rendering the Gauss map.
+	if (renderMaxMinPrincipalDirection)
+	{
+		glLineWidth((GLfloat)2.0);
+
+		// If value is 1, then render just max.
+		lineShader.Start();
+		if (renderMaxMinPrincipalDirection == 1)
+		{
+			glBindVertexArray(maxPrincipalDirections.getVAO());
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			lineShader.LoadProjectionMatrix(perspectiveMatrix);
+			lineShader.LoadViewMatrix(viewMatrix);
+			lineShader.LoadTransformMatrix(maxPrincipalDirections.transform);
+			glDrawArrays(GL_LINES, 0, maxPrincipalDirections.getCount());
+		}
+		// If value is 2, then render just min.
+		else if (renderMaxMinPrincipalDirection == 2)
+		{
+			glBindVertexArray(minPrincipalDirections.getVAO());
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			lineShader.LoadProjectionMatrix(perspectiveMatrix);
+			lineShader.LoadViewMatrix(viewMatrix);
+			lineShader.LoadTransformMatrix(minPrincipalDirections.transform);
+			glDrawArrays(GL_LINES, 0, minPrincipalDirections.getCount());
+		}
+		// Render both.
+		else
+		{
+			glBindVertexArray(maxPrincipalDirections.getVAO());
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			lineShader.LoadProjectionMatrix(perspectiveMatrix);
+			lineShader.LoadViewMatrix(viewMatrix);
+			lineShader.LoadTransformMatrix(maxPrincipalDirections.transform);
+			glDrawArrays(GL_LINES, 0, maxPrincipalDirections.getCount());
+
+			glBindVertexArray(minPrincipalDirections.getVAO());
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(1);
+			lineShader.LoadProjectionMatrix(perspectiveMatrix);
+			lineShader.LoadViewMatrix(viewMatrix);
+			lineShader.LoadTransformMatrix(minPrincipalDirections.transform);
+			glDrawArrays(GL_LINES, 0, minPrincipalDirections.getCount());
+		}
 		lineShader.Stop();
 	}
 
@@ -621,6 +795,7 @@ void Keyboard(unsigned char c, int x, int y)
 				std::cout << "Camera unlocked." << std::endl;
 			break;
 
+		// Camera motion.
 		case 'a':
 			if (!lockCamera)
 				camera.StepHorizontal(-1);
@@ -646,27 +821,48 @@ void Keyboard(unsigned char c, int x, int y)
 				camera.roll += 0.2f;
 			break;
 
+		// Mesh selection.
 		case '1':
 			activeMesh = 0;
+			std::cout << "Visualizing the " << ToString(curvatureList[0]) << ". " << std::endl;
 			break;
 
 		case '2':
 			if (2 <= meshList.size())
+			{
 				activeMesh = 1;
+				std::cout << "Visualizing the " << ToString(curvatureList[1]) << ". " << std::endl;
+			}
 			break;
 
 		case '3':
 			if (3 <= meshList.size())
+			{
 				activeMesh = 2;
+				std::cout << "Visualizing the " << ToString(curvatureList[2]) << ". " << std::endl;
+			}
 			break;
 
 		case '4':
 			if (4 <= meshList.size())
+			{
 				activeMesh = 3;
+				std::cout << "Visualizing the " << ToString(curvatureList[3]) << ". " << std::endl;
+			}
 			break;
 
 		case '5':
-			activeMesh = 4;
+			{
+				activeMesh = 5;
+				std::cout << "Visualizing the Gauss map (blue) and polar dual (red). " << std::endl;
+			}
+			break;
+
+		// Draw blank mesh.
+		case '0':
+			{
+				activeMesh = 4;
+			}
 			break;
 
 		case 'r':
@@ -685,6 +881,23 @@ void Keyboard(unsigned char c, int x, int y)
 			DoMainMenu(1);	// will not return here
 			break;				// happy compiler
 
+		case 'm':
+			renderMaxMinPrincipalDirection = 1;
+			break;
+
+		case 'n':
+			renderMaxMinPrincipalDirection = 2;
+			break;
+
+		case 'b':
+			renderMaxMinPrincipalDirection = 3;
+			break;
+
+		case 'v':
+			renderMaxMinPrincipalDirection = 0;
+			break;
+
+		// Triangle select tool.
 		case 't':
 			selectTriangle = !selectTriangle;
 			if (selectTriangle)
@@ -693,8 +906,8 @@ void Keyboard(unsigned char c, int x, int y)
 				std::cout << "Select tool off." << std::endl;
 			break;
 
-		default:
-			fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
+		//default:
+			//fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
 	}
 
 	// Force a call to Display( ):
@@ -789,9 +1002,6 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 	}
 	else
 	{
-		//std::cout << "Intersection with triangle at index " << index << std::endl;
-		//std::cout << "Highlighting mesh " << meshIndex << std::endl;
-
 		// Determine which point was closest to the intersection using the barycentric coordinates.
 		// By experiment, the 2D position (b, c) means a + b + c = 1, where a is determined by a = 1 - b - c:
 		// (c, a, b) correspond to the vertices given in order to the glm function.
@@ -808,13 +1018,25 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 		else
 			selectedVertex = triangles[index + 0];
 
+		Vert* vertex = &poly->vlist[selectedVertex];
+
+		/*
 		std::cout << std::endl;
 		std::cout << "Intersection at vertex " << selectedVertex << " in triangle " << index << std::endl;
+		*/
 		SetHighlight(activeMesh, meshIndex, selectedVertex, glm::vec4(1.0f, 215.0f / 255.0f, 0.0f, 1.0f));
+
+		// Calculate the curvature values at this vertex that are being visualized.
+		for (int i = 0; i < curvatureList.size(); ++i)
+		{
+			Curvature c = curvatureList[i];
+			double value = MeshAnalysis::GetVertexCurvature(vertex, c);
+			std::cout << "The " << ToString(c) << " of the selected vertex is " << value << std::endl;
+		}
 
 		// Get Gauss map.
 		std::vector<Triangle*> star = MeshAnalysis::GetVertexStar(&(poly->vlist[selectedVertex]));
-		std::vector<glm::vec3> gaussMap = Spherical::GetGaussMap(star, 500, 1.001f);
+		std::vector<glm::vec3> gaussMap = Spherical::GetGaussMap(star, 200, 1.001f);
 
 		// Get polar dual to the Gauss map.
 		std::vector<glm::vec3> normals;
@@ -824,14 +1046,17 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 			normals.push_back((glm::vec3)t->normal);
 		}
 		std::vector<glm::vec3> dualPolygon = Spherical::GetPolarPolygon(normals);
-		std::vector<glm::vec3> dualGaussMap = Spherical::GetGaussMap(dualPolygon, 500, 1.001f);
+		//dualPolygon = Spherical::GetPolarPolygon(dualPolygon);
+		std::vector<glm::vec3> dualGaussMap = Spherical::GetGaussMap(dualPolygon, 200, 1.001f);
 
 		std::cout << "Found " << star.size() << " elements in the vertex star: " << std::endl;
+		/*
 		for (int i = 0; i < star.size(); ++i)
 		{
 			star[i]->Print();
 		}
 		std::cout << std::endl;
+		*/
 
 		// Create curve: boundary of the Gauss map of the star of the vertex and the polar dual.
 		std::vector<LineVertex> curveVertices;
@@ -843,8 +1068,8 @@ void MouseRayTriangleIntersection(glm::vec3& ray)
 		glm::vec3 polarColor = glm::vec3(1.0f, 0.0f, 0.0f);
 		for (int i = 0; i < gaussMap.size(); ++i)
 		{
-			curveVertices.push_back(LineVertex(gaussMap[i], gaussColor));
-			polarVertices.push_back(LineVertex(dualGaussMap[i], polarColor));
+			curveVertices.push_back(LineVertex(gaussMap[i], gaussColor - glm::vec3(0.0f, 0.0f, (float)i / gaussMap.size())));
+			polarVertices.push_back(LineVertex(dualGaussMap[i], polarColor - glm::vec3((float)i / gaussMap.size(), 0.0f, 0.0f)));
 		}
 		CurveComponent sphericalImage(curveVertices);
 		CurveComponent polarSphericalImage(polarVertices);
@@ -896,7 +1121,7 @@ void MouseButton(int button, int state, int x, int y)
 
 		default:
 			b = 0;
-			fprintf( stderr, "Unknown mouse button: %d\n", button );
+			//fprintf( stderr, "Unknown mouse button: %d\n", button );
 	}
 
 	// button down sets the bit, up clears the bit:

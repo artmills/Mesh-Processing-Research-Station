@@ -1,8 +1,392 @@
 #include "meshanalysis.hpp"
+#include <limits>
 
 
 MeshAnalysis::MeshAnalysis() {}
 MeshAnalysis::~MeshAnalysis() {}
+
+std::vector<Edge*> MeshAnalysis::GetPrincipalDirections(Polyhedron* p)
+{
+	// Two directions for each vertex.
+	std::vector<Edge*> principals;
+	principals.reserve(p->vlist.size() * 2);
+
+	Edge* maxDirection;
+	Edge* minDirection;
+
+	// Go through the corner list and compute the principal directions of the corresponding vertex.
+	// Skip vertices we have already seen.
+	for (Vert& v : p->vlist)
+	{
+		// Min/max principal curvatures using the distortion.
+		double max = -1.0 * std::numeric_limits<double>::max();
+		double min = std::numeric_limits<double>::max();
+
+		int index = v.index;
+
+		glm::dvec3 vPosition = v.GetPosition();
+		std::vector<Triangle*> star = GetVertexStar(&v);
+		star.push_back(star[0]);
+
+		// Remember: star[size - 1] = star[0].
+		for (int i = 0; i < star.size() - 1; ++i)
+		{
+			// Normals:
+			glm::dvec3 current = star[i]->normal;
+			glm::dvec3 next = star[i+1]->normal;
+
+			// Angle between normals:
+			double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+			double angle = acos(dot);
+
+			// Figure out if the angle should be signed:
+			// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+			// Get the tangent vector to the edge.
+			Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+			if (e == NULL)
+				std::cout << "OOPS" << std::endl;
+			Vert* q = e->GetOtherVertex(&v);
+			glm::dvec3 te = q->GetPosition() - vPosition;
+			if (q->index == v.index)
+				std::cout << "OOPS" << std::endl;
+
+			// DEBUG: check that the edge is correct.
+			Triangle* t1 = e->GetOtherTriangle(star[i]);
+			Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+			if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+				std::cout << "EDGE BROKE" << std::endl;
+
+			// Check the inner product.
+			double ip = glm::dot(glm::cross(current, next), te);
+			if (ip > 0)
+				angle *= -1.0;
+
+			// Check for min or max.
+			if (angle > max)
+			{
+				max = angle;
+				maxDirection = e;
+			}
+			if (angle < min)
+			{
+				min = angle;
+				minDirection = e;
+			}
+		}
+		principals.push_back(maxDirection);
+		principals.push_back(minDirection);
+	}
+	return principals;
+}
+
+double MeshAnalysis::ComputePrincipalDeviation(Corner& c)
+{
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = v->GetPosition();
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	// Min/max principal curvatures using the distortion.
+	double min = std::numeric_limits<double>::max();
+	double max = -1.0 * std::numeric_limits<double>::max();
+	glm::dvec3 minDirection;
+	glm::dvec3 maxDirection;
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
+	{
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = q->GetPosition() - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+		// Check for min or max.
+		if (angle > max)
+		{
+			max = angle;
+			maxDirection = te / glm::length(te);
+		}
+		if (angle < min)
+		{
+			min = angle;
+			minDirection = te / glm::length(te);
+		}
+	}
+	
+	double principalAngle = glm::acos(glm::clamp(glm::dot(maxDirection, minDirection), -1.0, 1.0));
+	return 0.5 * M_PI - principalAngle;
+}
+
+double MeshAnalysis::ComputeMeanFromDistortion(Corner& c)
+{
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = v->GetPosition();
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	// Min/max principal curvatures using the distortion.
+	double min = std::numeric_limits<double>::max();
+	double max = -1.0 * std::numeric_limits<double>::max();
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
+	{
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = q->GetPosition() - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+		// Check for min or max.
+		if (angle > max)
+			max = angle;
+		if (angle < min)
+			min = angle;
+	}
+	return 0.5 * (min + max);
+}
+
+double MeshAnalysis::ComputeGaussianFromDistortion(Corner& c)
+{
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = v->GetPosition();
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	// Min/max principal curvatures using the distortion.
+	double min = std::numeric_limits<double>::max();
+	double max = -1.0 * std::numeric_limits<double>::max();
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
+	{
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = q->GetPosition() - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+		// Check for min or max.
+		if (angle > max)
+			max = angle;
+		if (angle < min)
+			min = angle;
+	}
+	return min * max;
+}
+double MeshAnalysis::ComputeMinPrincipalDistortion(Corner& c)
+{
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = v->GetPosition();
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	// Min/max principal curvatures using the distortion.
+	double min = std::numeric_limits<double>::max();
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
+	{
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = q->GetPosition() - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+		// Check for min or max.
+		//if (angle > max)
+		//	max = angle;
+		if (angle < min)
+			min = angle;
+	}
+	return min;
+}
+
+double MeshAnalysis::ComputeMaxPrincipalDistortion(Corner& c)
+{
+	// Get the vertex and its star.
+	// Set the last element to be equal to the first so all the calculations can be done in a single for-loop.
+	Vert* v = c.v;
+	glm::dvec3 vPosition = v->GetPosition();
+	std::vector<Triangle*> star = GetVertexStar(v);
+	star.push_back(star[0]);
+
+	//std::cout << "Current vertex is " << v->index << std::endl;
+	if (c.o == NULL)
+		std::cout << "BOUNDARY" << std::endl;
+
+	// Min/max principal curvatures using the distortion.
+	//double min = std::numeric_limits<double>::max();
+	double max = -1.0 * std::numeric_limits<double>::max();
+
+	// Remember: star[size - 1] = star[0].
+	for (int i = 0; i < star.size() - 1; ++i)
+	{
+		// Normals:
+		glm::dvec3 current = star[i]->normal;
+		glm::dvec3 next = star[i+1]->normal;
+
+		// Angle between normals:
+		double dot = glm::clamp(glm::dot(current, next), -1.0, 1.0);
+		double angle = acos(dot);
+
+		// Figure out if the angle should be signed:
+		// \ip{N_i \times N_{i+1} , t_e} > 0 => negative, where t_e is the tangent vector along the edge.
+
+		// Get the tangent vector to the edge.
+		Edge* e = MeshAnalysis::GetEdge(star[i], star[i+1]);
+		if (e == NULL)
+			std::cout << "OOPS" << std::endl;
+		Vert* q = e->GetOtherVertex(v);
+		glm::dvec3 te = q->GetPosition() - vPosition;
+		if (q->index == v->index)
+			std::cout << "OOPS" << std::endl;
+
+		// DEBUG: check that the edge is correct.
+		Triangle* t1 = e->GetOtherTriangle(star[i]);
+		Triangle* t0 = e->GetOtherTriangle(star[i+1]);
+		if (t1->index != star[i+1]->index || t0->index != star[i]->index)
+			std::cout << "EDGE BROKE" << std::endl;
+
+		// Check the inner product.
+		double ip = glm::dot(glm::cross(current, next), te);
+		if (ip > 0)
+			angle *= -1.0;
+
+		// Check for min or max.
+		if (angle > max)
+			max = angle;
+		//if (angle < min)
+		//	min = angle;
+	}
+	return max;
+}
 
 double MeshAnalysis::ComputeSignedDistortion(Corner& c)
 {
@@ -312,6 +696,40 @@ double MeshAnalysis::ComputeMixedPerimeter(Corner& c)
 }
 
 
+double MeshAnalysis::GetVertexCurvature(Vert* v, Curvature curv)
+{
+	// Choose the correct curvature function.
+	double (*CurvatureFunction)(Corner&);	
+	if (curv == Curvature::GAUSSIAN)
+		CurvatureFunction = ComputeGaussianCurvature;
+	else if (curv == Curvature::MEAN)
+		CurvatureFunction = ComputeMeanCurvature;
+	else if (curv == Curvature::HORIZON)
+		CurvatureFunction = ComputeHorizonMeasure;
+	else if (curv == Curvature::ORIGINAL)
+		CurvatureFunction = ComputeHorizonMeasureTest;
+	else if (curv == Curvature::DISTORTION)
+		CurvatureFunction = ComputeDistortion;
+	else if (curv == Curvature::CONE)
+		CurvatureFunction = ComputeGaussianCone;
+	else if (curv == Curvature::DISTORTION_SIGNED)
+		CurvatureFunction = ComputeSignedDistortion;
+	else if (curv == Curvature::MEAN_SIGNED)
+		CurvatureFunction = ComputeSignedMeanCurvature;
+	else if (curv == Curvature::MAX_PRINCIPAL_DISTORTION)
+		CurvatureFunction = ComputeMaxPrincipalDistortion;
+	else if (curv == Curvature::MIN_PRINCIPAL_DISTORTION)
+		CurvatureFunction = ComputeMinPrincipalDistortion;
+	else if (curv == Curvature::FALSE_GAUSSIAN)
+		CurvatureFunction = ComputeGaussianFromDistortion;
+	else if (curv == Curvature::FALSE_MEAN)
+		CurvatureFunction = ComputeMeanFromDistortion;
+	else //if (curv == Curvature::PRINCIPAL_DEVIATION)
+		CurvatureFunction = ComputePrincipalDeviation;
+
+	Corner c = *(v->c);
+	return CurvatureFunction(c);
+}
 std::vector<double> MeshAnalysis::GetVertexCurvatures(Polyhedron* p, Curvature curv)
 {
 	// Assume that curvatures[i] is the curvature of vertices[i].
@@ -333,8 +751,18 @@ std::vector<double> MeshAnalysis::GetVertexCurvatures(Polyhedron* p, Curvature c
 		CurvatureFunction = ComputeGaussianCone;
 	else if (curv == Curvature::DISTORTION_SIGNED)
 		CurvatureFunction = ComputeSignedDistortion;
-	else //if (curv == Curvature::MEAN_SIGNED)
+	else if (curv == Curvature::MEAN_SIGNED)
 		CurvatureFunction = ComputeSignedMeanCurvature;
+	else if (curv == Curvature::MAX_PRINCIPAL_DISTORTION)
+		CurvatureFunction = ComputeMaxPrincipalDistortion;
+	else if (curv == Curvature::MIN_PRINCIPAL_DISTORTION)
+		CurvatureFunction = ComputeMinPrincipalDistortion;
+	else if (curv == Curvature::FALSE_GAUSSIAN)
+		CurvatureFunction = ComputeGaussianFromDistortion;
+	else if (curv == Curvature::FALSE_MEAN)
+		CurvatureFunction = ComputeMeanFromDistortion;
+	else //if (curv == Curvature::PRINCIPAL_DEVIATION)
+		CurvatureFunction = ComputePrincipalDeviation;
 
 	// Go through the corner list and compute the Gaussian curvature of the corresponding vertex.
 	// Skip vertices we have already seen.
@@ -415,11 +843,13 @@ double MeshAnalysis::ComputeMixedArea(Corner& c)
 
 double MeshAnalysis::ComputeGaussianCurvature(Corner& c)
 {
+	/*
 	double mixedArea = ComputeMixedArea(c);
 	if (mixedArea == -1)
 		return 0;
 	return ((2.0 * M_PI) - c.v->totalAngle) / mixedArea;
-	//return ((2.0 * M_PI) - c.v->totalAngle);
+	*/
+	return ((2.0 * M_PI) - c.v->totalAngle);
 }
 
 // See Equation 8 in the paper.

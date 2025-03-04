@@ -102,7 +102,7 @@ MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvatu
 
 	// Compute statistics of the values for coloring.
 	double minNegative = std::numeric_limits<double>::max();
-	double maxPositive = std::numeric_limits<double>::min();
+	double maxPositive = -1.0 * std::numeric_limits<double>::max();
 	double meanNegative = 0;
 	double meanPositive = 0;
 	int countNegative = 0;
@@ -135,32 +135,43 @@ MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvatu
 	std::cout << "MAX POSITIVE: " << maxPositive << std::endl;
 	*/
 
-
-	// Build up list of vertices.
-	for (Vert& current : p->vlist)
+	// Chose coloring scheme: if there are any negative curvature values, use signed scheme.
+	if (countNegative > 0)
 	{
-		// Create the vertex.
-		Vertex v;
-		v.setPosition((float)current.x, (float)current.y, (float)current.z);
-		v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
-		v.setTexture(0, 0);
-		v.setHighlightColor(glm::vec4(0, 0, 0, 1));
-		v.setBarycentricCoordinate(glm::vec3(0, 0, 0));
+		// Build up list of vertices.
+		for (Vert& current : p->vlist)
+		{
+			// Create the vertex.
+			Vertex v;
+			v.setPosition((float)current.x, (float)current.y, (float)current.z);
+			v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
+			v.setTexture(0, 0);
+			v.setHighlightColor(glm::vec4(0, 0, 0, 1));
+			//v.setBarycentricCoordinate(glm::vec3(0, 0, 0));
 
-		int index = current.index;
-		if (c == Curvature::GAUSSIAN || c == Curvature::DISTORTION_SIGNED || c == Curvature::MEAN_SIGNED)
+			int index = current.index;
 			v.setColor(InterpolateSignedColor(minNegative, maxPositive, meanNegative, meanPositive, values[index]));
-			//v.setColor(InterpolateColor(0, maxPositive, meanPositive, values[index]));
-		else
-			v.setColor(InterpolateColor(0, maxPositive, meanPositive, values[index]));
-		/*
-		if (values[index] < 0.001f)
-			v.setColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-		else
-			v.setColor(glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
-		*/
+			vertices.push_back(v);
+		}
+	}
+	// Unsigned coloring.
+	else
+	{
+		// Build up list of vertices.
+		for (Vert& current : p->vlist)
+		{
+			// Create the vertex.
+			Vertex v;
+			v.setPosition((float)current.x, (float)current.y, (float)current.z);
+			v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
+			v.setTexture(0, 0);
+			v.setHighlightColor(glm::vec4(0, 0, 0, 1));
+			v.setBarycentricCoordinate(glm::vec3(0, 0, 0));
 
-		vertices.push_back(v);
+			int index = current.index;
+			v.setColor(InterpolateColor(0, maxPositive, meanPositive, values[index]));
+			vertices.push_back(v);
+		}
 	}
 
 	// Stitch together triangles.
@@ -169,6 +180,10 @@ MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvatu
 		triangles.push_back(t.vertices[0]->index);
 		triangles.push_back(t.vertices[1]->index);
 		triangles.push_back(t.vertices[2]->index);
+
+		vertices[t.vertices[0]->index].setBarycentricCoordinate(glm::vec3(1.0f, 0.0f, 0.0f));
+		vertices[t.vertices[1]->index].setBarycentricCoordinate(glm::vec3(0.0f, 1.0f, 0.0f));
+		vertices[t.vertices[2]->index].setBarycentricCoordinate(glm::vec3(0.0f, 0.0f, 1.0f));
 	}
 
 	this->vertices = vertices;

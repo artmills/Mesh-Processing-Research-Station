@@ -46,9 +46,6 @@ void BasicShader::GetAllUniformLocations()
 	locationLightPosition = GetUniformLocation("uLightPosition");
 	locationEyePosition = GetUniformLocation("uEyePosition");
 
-	locationLightView = GetUniformLocation("uLightViewMatrix");
-	locationLightPerspective = GetUniformLocation("uLightPerspectiveMatrix");
-	locationShadowMap = GetUniformLocation("uShadowMap");
 	locationTexture = GetUniformLocation("uTexture");
 
 	locationWireframe = GetUniformLocation("uWireframe");
@@ -88,13 +85,6 @@ void BasicShader::LoadLighting(float ambient, float diffuse, float specular,
 
 	LoadUniform(locationLightPosition, lightPosition);
 	LoadUniform(locationEyePosition, eyePosition);
-}
-
-void BasicShader::LoadShadows(glm::mat4 lightView, glm::mat4 lightPerspective, int shadowMap)
-{
-	LoadUniform(locationLightView, lightView);
-	LoadUniform(locationLightPerspective, lightPerspective);
-	LoadUniform(locationShadowMap, shadowMap);
 }
 
 void BasicShader::LoadTexture(int unit)

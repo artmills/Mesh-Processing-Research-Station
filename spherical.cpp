@@ -3,26 +3,29 @@
 std::vector<glm::vec3> Spherical::GetPolarPolygon(std::vector<glm::vec3>& polygon)
 {
 	// Using the polar dual formula: w_i' = w_i \times w_{i+1}.
-	// w_k = w_k \times w_0, where k is the last index.
+	// w_k' = w_k \times w_0, where k is the last index.
+	
 	std::vector<glm::vec3> polar;
 	polar.reserve(polygon.size());
 
-	// Compute the first dual manually.
-	glm::vec3 firstDual = glm::cross(polygon[1], polygon[polygon.size() - 2]);	
-	firstDual /= glm::length(firstDual);
-	polar.push_back(firstDual);
-	
-	for (int i = 1; i < polygon.size() - 1; ++i)
+	for (int i = 0; i < polygon.size() - 1; ++i)
 	{
-		glm::vec3 dual = glm::cross(polygon[i + 1], polygon[i - 1]);	
+		glm::vec3 dual = glm::cross(polygon[i], polygon[i + 1]);	
 		dual /= glm::length(dual);
 		polar.push_back(dual);
 	}
 	
 	// Compute last element manually.
-	//polar.push_back(glm::cross(polygon[polygon.size() - 1], polygon[0]));
+	glm::vec3 last = glm::cross(polygon[polygon.size() - 1], polygon[0]);
+	last /= glm::length(last);
+	polar.push_back(last);
 
-	std::cout << "Found " << polar.size() << " vertices in the polar dual." << std::endl;
+	/*
+	std::cout << "Found " << polar.size() << " vertices in the polar dual:" << std::endl;
+	for (glm::vec3& v : polar)
+		std::cout << glm::to_string(v) << std::endl;
+	*/
+
 	return polar;
 }
 
@@ -45,6 +48,8 @@ std::vector<glm::vec3> Spherical::GetGaussMap(std::vector<glm::vec3>& star, uint
 	{
 		glm::vec3& current = normals[i];
 		glm::vec3& next = normals[i + 1];
+
+		//std::cout << "Positive arc length: " << glm::acos(glm::dot(current, next)) << std::endl;
 
 		// Interpolation.
 		gaussMap.push_back(sphereRadius * current);

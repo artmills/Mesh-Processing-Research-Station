@@ -27,8 +27,6 @@
  * 6) float uSpecularColor
  * 7) vec3 uLightPosition
  * 8) vec3 uEyePosition
- * 10) mat4 uLightViewMatrix
- * 11) mat4 uLightPerspectiveMatrix
  * 12) int uWireframe
  */
 class BasicShader : public ShaderProgram
@@ -60,9 +58,6 @@ public:
 					  glm::vec3 lightPosition,
 					  glm::vec3 eyePosition);
 
-	/** Load shadow-related uniforms. */
-	void LoadShadows(glm::mat4 lightView, glm::mat4 lightPerspective, int shadowMap);
-
 	/** Load texture. */
 	void LoadTexture(int unit);
 
@@ -89,11 +84,6 @@ private:
 	uint locationSpecularColor;
 	uint locationLightPosition;
 	uint locationEyePosition;
-
-	/** ID of the shadow-related uniforms. */
-	uint locationLightView;
-	uint locationLightPerspective;
-	uint locationShadowMap;
 
 	/** ID of the texture-related uniforms. */
 	uint locationTexture;

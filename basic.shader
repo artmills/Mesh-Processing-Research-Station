@@ -13,7 +13,6 @@ out vec3 fNormal;
 out vec3 fToLight;
 out vec2 fTexture;
 out vec3 fToEye;
-out vec4 fLightSpace;
 out vec3 fBarycentric;
 out vec4 fHighlight;
 
@@ -24,16 +23,10 @@ uniform mat4 uTransformMatrix;
 uniform vec3 uLightPosition;
 uniform vec3 uEyePosition;
 
-uniform mat4 uLightViewMatrix;
-uniform mat4 uLightPerspectiveMatrix;
-
 void main()
 {
 	// World position:
 	gl_Position = uProjectionMatrix * uViewMatrix * uTransformMatrix * vPosition;
-
-	// Shadow map position:
-	fLightSpace = uLightPerspectiveMatrix * uLightViewMatrix* uTransformMatrix * vPosition;
 
 	// Check highlight:
 	fColor = vColor;
@@ -57,7 +50,6 @@ in vec3 fNormal;
 in vec3 fToLight;
 in vec2 fTexture;
 in vec3 fToEye;
-in vec4 fLightSpace;
 in vec3 fBarycentric;
 in vec4 fHighlight;
 
