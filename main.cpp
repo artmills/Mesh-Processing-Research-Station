@@ -508,11 +508,11 @@ void InitLists()
 	lightEye = camera.GetDirection();
 
 	std::vector<Curvature> curvatures;
-	curvatures.push_back(Curvature::MEAN);
-	curvatures.push_back(Curvature::DISTORTION);
-	curvatures.push_back(Curvature::HORIZON);
-	curvatures.push_back(Curvature::CONE);
-	LoadMeshFromFile("./tempmodels/bunny.ply", 2, curvatures);
+	curvatures.push_back(Curvature::MEAN_SIGNED);
+	curvatures.push_back(Curvature::DISTORTION_SIGNED);
+	curvatures.push_back(Curvature::FALSE_MEAN);
+	curvatures.push_back(Curvature::FALSE_GAUSSIAN);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
 	curvatureList = curvatures;
 
 	std::cout << "Computed curvatures. " << std::endl;

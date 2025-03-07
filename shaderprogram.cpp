@@ -3,6 +3,13 @@
 ShaderProgram::ShaderProgram() {}
 ShaderProgram::~ShaderProgram() {}
 
+/** GEOMETRY SHADER NOTE **/
+/* Do not forget to do the following when doing a geometry shader:
+ * - The input variables are arrays: in gColor[];
+ * - The gl_Position must be set, even if it does not change: gl_Position = gl_in[i].gl_Position; inside a for-loop.
+ * - Call EmitVertex() for each vertex in the for-loop.
+ */
+
 
 // actual shader functionality.
 
