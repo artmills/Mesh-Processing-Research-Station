@@ -477,6 +477,15 @@ Edge* MeshAnalysis::GetEdge(Triangle* t0, Triangle* t1)
 
 double MeshAnalysis::ComputeGaussianCone(Corner& c)
 {
+	double mean = ComputeSignedMeanCurvature(c);
+	double distortion = ComputeSignedDistortion(c);
+
+	return abs(abs(mean) - abs(distortion));
+}
+
+/*
+double MeshAnalysis::ComputeGaussianCone(Corner& c)
+{
 	// Get the vertex and its star.
 	Vert* v = c.v;
 	std::vector<Triangle*> star = GetVertexStar(v);
@@ -514,6 +523,7 @@ double MeshAnalysis::ComputeGaussianCone(Corner& c)
 	//return distortion + total;
 
 }
+*/
 
 double MeshAnalysis::ComputeDistortion(Corner& c)
 {

@@ -379,11 +379,16 @@ void LoadMeshFromFile(std::string fileName, int subdivisions, std::vector<Curvat
 	// Currently hard-coded as up to four curvatures that can be displayed.
 	for (int i = 0; i < 4; ++i)
 	{
+		double total = 0.0;
 		if (i < curvatures.size())
 		{
 			std::vector<double> curvatureData = MeshAnalysis::GetVertexCurvatures(lp, curvatures[i]);
 			meshList[i].push_back(MeshComponent(lp, curvatureData, curvatures[i]));
 			Loader::PrepareMesh(meshList[i][0]);
+
+			for (int i = 0; i < curvatureData.size(); ++i)
+				total += curvatureData[i];
+			std::cout << "Total " << ToString(curvatures[i]) << " is " << total << std::endl;
 		}
 	}
 	
@@ -503,16 +508,15 @@ void InitLists()
 	lightEye = camera.GetDirection();
 
 	std::vector<Curvature> curvatures;
-	curvatures.push_back(Curvature::MEAN_SIGNED);
-	curvatures.push_back(Curvature::FALSE_MEAN);
-	curvatures.push_back(Curvature::DISTORTION_SIGNED);
+	curvatures.push_back(Curvature::MEAN);
+	curvatures.push_back(Curvature::DISTORTION);
 	curvatures.push_back(Curvature::HORIZON);
-	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
+	curvatures.push_back(Curvature::CONE);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 2, curvatures);
 	curvatureList = curvatures;
 
 	std::cout << "Computed curvatures. " << std::endl;
 
-	std::cout << "Attempting to compute principal directions. " << std::endl;
 	std::vector<Edge*> principals = MeshAnalysis::GetPrincipalDirections(poly);
 	std::vector<LineVertex> maxPrincipals;
 	std::vector<LineVertex> minPrincipals;
@@ -533,7 +537,6 @@ void InitLists()
 		minPrincipals.push_back(LineVertex(min0, glm::vec3(0.0f, 0.0f, 1.0f)));
 		minPrincipals.push_back(LineVertex(min1, glm::vec3(0.0f, 0.0f, 1.0f)));
 	}
-	std::cout << maxPrincipals.size() << " " << minPrincipals.size() << std::endl;
 	maxPrincipalDirections = CurveComponent(maxPrincipals);
 	minPrincipalDirections = CurveComponent(minPrincipals);
 	Loader::PrepareCurve(maxPrincipalDirections);
@@ -757,15 +760,27 @@ void DoWireframeMenu(int id)
 	enableWireframe = id;
 }
 
+void DoLinesOfCurvatureMenu(int id)
+{
+	renderMaxMinPrincipalDirection = id;
+}
+
 void InitMenus()
 {
 	glutSetWindow(mainWindow);
+
+	int linesOfCurvatureMenu = glutCreateMenu(DoLinesOfCurvatureMenu);
+	glutAddMenuEntry("Max", 1);
+	glutAddMenuEntry("Min", 2);
+	glutAddMenuEntry("Both", 3);
+	glutAddMenuEntry("None", 0);
 
 	int wireframeMenu = glutCreateMenu(DoWireframeMenu);
 	glutAddMenuEntry("Enable", 1);
 	glutAddMenuEntry("Disable", 0);
 
 	int mainmenu = glutCreateMenu(DoMainMenu);
+	glutAddSubMenu("Lines of Curvature", linesOfCurvatureMenu);
 	glutAddSubMenu("Wireframe", wireframeMenu);
 	glutAddMenuEntry("Reset", 0);
 	glutAddMenuEntry("Quit", 1);
