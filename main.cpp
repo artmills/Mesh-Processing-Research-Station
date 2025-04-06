@@ -333,6 +333,9 @@ std::string ToString(Curvature c)
 		case Curvature::PRINCIPAL_DEVIATION:
 			s = "Principal deviation";
 			break;
+		case Curvature::DIFFERENCE:
+			s = "Difference ";
+			break;
 	}
 	return s;
 }
@@ -509,11 +512,14 @@ void InitLists()
 
 	std::vector<Curvature> curvatures;
 	curvatures.push_back(Curvature::MEAN_SIGNED);
-	curvatures.push_back(Curvature::DISTORTION_SIGNED);
-	curvatures.push_back(Curvature::FALSE_MEAN);
-	curvatures.push_back(Curvature::FALSE_GAUSSIAN);
-	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
+	curvatures.push_back(Curvature::GAUSSIAN);
+	curvatures.push_back(Curvature::ORIGINAL);
+	curvatures.push_back(Curvature::DIFFERENCE);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 2, curvatures);
 	curvatureList = curvatures;
+
+	//LoadMeshFromFile("./tempmodels/dragon.ply", 1, 0, glm::vec3(0.0f, 1.0f, 1.0f));
+
 
 	std::cout << "Computed curvatures. " << std::endl;
 
@@ -532,10 +538,10 @@ void InitLists()
 		glm::vec3 max1 = (glm::vec3)(max->vertices[1]->GetPosition());
 		glm::vec3 min0 = (glm::vec3)(min->vertices[0]->GetPosition());
 		glm::vec3 min1 = (glm::vec3)(min->vertices[1]->GetPosition());
-		maxPrincipals.push_back(LineVertex(max0, glm::vec3(1.0f, 0.0f, 0.0f)));
-		maxPrincipals.push_back(LineVertex(max1, glm::vec3(1.0f, 0.0f, 0.0f)));
-		minPrincipals.push_back(LineVertex(min0, glm::vec3(0.0f, 0.0f, 1.0f)));
-		minPrincipals.push_back(LineVertex(min1, glm::vec3(0.0f, 0.0f, 1.0f)));
+		maxPrincipals.push_back(LineVertex(max0, glm::vec3(1.0f, 0.6f, 0.0f)));
+		maxPrincipals.push_back(LineVertex(max1, glm::vec3(1.0f, 0.6f, 0.0f)));
+		minPrincipals.push_back(LineVertex(min0, glm::vec3(0.0f, 1.0f, 1.0f)));
+		minPrincipals.push_back(LineVertex(min1, glm::vec3(0.0f, 1.0f, 1.0f)));
 	}
 	maxPrincipalDirections = CurveComponent(maxPrincipals);
 	minPrincipalDirections = CurveComponent(minPrincipals);
@@ -639,6 +645,7 @@ void Display()
 		glDrawArrays(GL_LINE_STRIP, 0, curve.getCount());
 
 		// Render polar dual.
+		/*
 		glBindVertexArray(dualCurve.getVAO());
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -646,6 +653,7 @@ void Display()
 		lineShader.LoadViewMatrix(viewMatrix);
 		lineShader.LoadTransformMatrix(curve.transform);
 		glDrawArrays(GL_LINE_STRIP, 0, dualCurve.getCount());
+		*/
 
 		lineShader.Stop();
 	}

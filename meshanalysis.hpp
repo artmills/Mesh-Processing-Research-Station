@@ -75,6 +75,9 @@ public:
 
 	// Compute the distortion at the vertex.
 	static double ComputeDistortion(Corner& c);
+	
+	// Compute the difference between mean and distortion at the vertex.
+	static double ComputeDifference(Corner& c);
 
 	// Compute the principal curvatures from distortion.
 	static double ComputeMaxPrincipalDistortion(Corner& c);

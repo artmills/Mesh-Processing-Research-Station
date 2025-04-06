@@ -592,34 +592,18 @@ std::vector<Triangle*> MeshAnalysis::GetVertexStar(Vert* v)
 
 
 
+double MeshAnalysis::ComputeDifference(Corner& c)
+{
+	double distortion = ComputeSignedDistortion(c) / ComputeMixedPerimeter(c);
+	double mean = ComputeSignedMeanCurvature(c);
+
+	return std::abs((double)mean - (double)distortion);
+	//return (double)(distortion - mean) / M_PI;
+}
+
 double MeshAnalysis::ComputeHorizonMeasureTest(Corner& c)
 {
-	// Start with the mixed area.
-	double mixedArea = ComputeMixedArea(c);
-	if (mixedArea == -1)
-		return 0;
-	
-	// Get the vertex associated with this corner.
-	Vert* v = c.v;
-
-	// Get list of triangle normal vectors in the list of triangles containing the vertex.
-	std::vector<glm::dvec3> normals;
-	for (Triangle* t : v->triangles)
-	{
-		normals.push_back(t->normal);
-	}
-
-	// Compute angles between each pair of normal vectors.
-	double last = glm::clamp(glm::dot(normals[normals.size()-1], normals[0]), -1.0, 1.0);
-	double total = acos(last);
-	for (int i = 0; i < normals.size() - 1; ++i)
-	{
-		double dot = glm::clamp(glm::dot(normals[i], normals[i+1]), -1.0, 1.0);
-		total += acos(dot);
-	}
-
-	// Testing: if the Gaussian curvature is negative, try adding 4pi.
-	return 2.0 * total / mixedArea;
+	return ComputeSignedDistortion(c) / ComputeMixedPerimeter(c);
 }
 double MeshAnalysis::ComputeHorizonMeasure(Corner& c)
 {
@@ -734,8 +718,10 @@ double MeshAnalysis::GetVertexCurvature(Vert* v, Curvature curv)
 		CurvatureFunction = ComputeGaussianFromDistortion;
 	else if (curv == Curvature::FALSE_MEAN)
 		CurvatureFunction = ComputeMeanFromDistortion;
-	else //if (curv == Curvature::PRINCIPAL_DEVIATION)
+	else if (curv == Curvature::PRINCIPAL_DEVIATION)
 		CurvatureFunction = ComputePrincipalDeviation;
+	else 
+		CurvatureFunction = ComputeDifference;
 
 	Corner c = *(v->c);
 	return CurvatureFunction(c);
@@ -771,8 +757,10 @@ std::vector<double> MeshAnalysis::GetVertexCurvatures(Polyhedron* p, Curvature c
 		CurvatureFunction = ComputeGaussianFromDistortion;
 	else if (curv == Curvature::FALSE_MEAN)
 		CurvatureFunction = ComputeMeanFromDistortion;
-	else //if (curv == Curvature::PRINCIPAL_DEVIATION)
+	else if (curv == Curvature::PRINCIPAL_DEVIATION)
 		CurvatureFunction = ComputePrincipalDeviation;
+	else //if (curv == Curvature::PRINCIPAL_DEVIATION)
+		CurvatureFunction = ComputeDifference;
 
 	// Go through the corner list and compute the Gaussian curvature of the corresponding vertex.
 	// Skip vertices we have already seen.
@@ -801,44 +789,41 @@ double MeshAnalysis::ComputeMixedArea(Corner& c)
 
 	// Bounce around the vertex using the corner:
 	int k = -1;
-	Corner* previous = &c;
+	Corner* current = &c;
 	while (k != c.index)
 	{
 		// Check if this is a boundary vertex.
 		// If so, set the mixed area to be -1.
-		if (previous->p->o == NULL)
+		if (current->p->o == NULL)
 			return -1;
 
-		Corner* adjacent = previous->p->o->p;
-		k = adjacent->index;
 		//std::cout << k << " " << c.index << " " << c.angle << " " << c.v->valence << " " << adjacent->v->index << std::endl;
 
 		// If the triangle is obtuse, but the obtuse angle is NOT at this corner:
-		if (adjacent->p->angle > 0.5 * M_PI ||
-			adjacent->n->angle > 0.5 * M_PI)
+		if (current->p->angle > 0.5 * M_PI ||
+			current->n->angle > 0.5 * M_PI)
 		{
 			//std::cout << "Obtuse triangle at " << c.v->index << std::endl;
-			mixedArea += 0.25 * adjacent->t->area;	
+			mixedArea += 0.25 * current->t->area;	
 		}
 		// If the triangle is obtuse and the angle IS at this corner:
-		else if (adjacent->angle > 0.5 * M_PI)
+		else if (current->angle > 0.5 * M_PI)
 		{
 			//std::cout << "Obtuse triangle at " << c.v->index << std::endl;
-			mixedArea += 0.5 * adjacent->t->area;
+			mixedArea += 0.5 * current->t->area;
 		}
 		// The triangle is not obtuse:
 		else
 		{
-			double theta = adjacent->n->angle;
-			double phi = previous->p->angle;
+			double theta = current->n->angle;
+			double phi   = current->p->angle;
 
-			// Doing a little trick: pq is equal to pr.
-			double pq = adjacent->n->e->GetLength();
-			double pr = previous->p->e->GetLength();
+			double pq = current->n->e->GetLength();
+			double pr = current->p->e->GetLength();
 			pq *= pq;
 			pr *= pr;
 
-			double test = (1.0 / tan(theta)) + pr * (1.0 / tan(phi));
+			double test = pq * (1.0 / tan(theta)) + pr * (1.0 / tan(phi));
 			if (test <= 0)
 			{
 				std::cout << "ERROR: non-positive mixed area. " << std::endl;
@@ -846,7 +831,9 @@ double MeshAnalysis::ComputeMixedArea(Corner& c)
 			}
 			mixedArea += (1.0 / 8.0) * (pq * (1.0 / tan(theta)) + pr * (1.0 / tan(phi)));
 		}
-		previous = adjacent;
+		Corner* adjacent = current->p->o->p;
+		k = adjacent->index;
+		current = adjacent;
 	}
 	return mixedArea;
 }

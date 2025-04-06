@@ -134,7 +134,33 @@ MeshComponent::MeshComponent(Polyhedron* p, std::vector<double>& values, Curvatu
 	std::cout << "MIN NEGATIVE: " << minNegative << std::endl;
 	std::cout << "MAX POSITIVE: " << maxPositive << std::endl;
 	*/
+	/*
+	if (c == Curvature::GAUSSIAN)
+	{
+		// Build up list of vertices.
+		for (Vert& current : p->vlist)
+		{
+			// Create the vertex.
+			Vertex v;
+			v.setPosition((float)current.x, (float)current.y, (float)current.z);
+			v.setNormal((float)current.normal.x, (float)current.normal.y, (float)current.normal.z);
+			v.setTexture(0, 0);
+			v.setHighlightColor(glm::vec4(0, 0, 0, 1));
+			//v.setBarycentricCoordinate(glm::vec3(0, 0, 0));
 
+			int index = current.index;
+			if (values[index] > 0)
+				v.setColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+			else if (values[index] < 0)
+				v.setColor(glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+			else
+				v.setColor(glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+
+			vertices.push_back(v);
+		}
+
+	}
+	*/
 	// Chose coloring scheme: if there are any negative curvature values, use signed scheme.
 	if (countNegative > 0)
 	{
