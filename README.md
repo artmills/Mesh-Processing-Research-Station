@@ -1,3 +1,6 @@
+![Screenshot_select-area_20250406153729](https://github.com/user-attachments/assets/973b7cdb-817b-4d5c-8cbb-9ed65d3ee88e)
+
+
 # Mesh Processing Research Station
 
 This ever-evolving project is where I perform the computational geometry experiments for my PhD research in discrete differential geometry.
