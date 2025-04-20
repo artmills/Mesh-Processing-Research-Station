@@ -7,6 +7,7 @@ in vec3 vNormal;
 out vec3 fNormal;
 out vec3 fToLight;
 out vec3 fToEye;
+out float fCurvature;
 
 uniform mat4 uViewMatrix;
 uniform mat4 uTransformMatrix;
@@ -15,10 +16,15 @@ uniform mat4 uProjectionMatrix;
 uniform vec3 uLightPosition;
 uniform vec3 uEyePosition;
 
+uniform samplerBuffer uCurvatureData;
+
 void main()
 {
 	// World position:
 	gl_Position = uProjectionMatrix * uViewMatrix * uTransformMatrix * vPosition;
+
+	// Get curvature data.
+	fCurvature = texelFetch(uCurvatureData, gl_VertexID).x;
 
 	fNormal = vNormal;
 	fToLight = uLightPosition - vPosition.xyz;
@@ -32,12 +38,12 @@ void main()
 in vec3 fNormal;
 in vec3 fToLight;
 in vec3 fToEye;
+in float fCurvature;
 
-uniform float uAmbient;
 uniform float uDiffuse;
-uniform float uSpecular;
-uniform float uShininess;
-uniform vec3 uSpecularColor;
+
+int levels = 8;
+float scaleFactor = 1.0 / levels;
 
 out vec4 color;
 
@@ -48,21 +54,14 @@ void main()
 	vec3 unitToLight = normalize(fToLight);
 	vec3 unitToEye = normalize(fToEye);
 
-	// Ambient:
-	vec3 ambient = uAmbient * vec3(0.0, 1.0, 0.0);
-
 	// Diffuse:
+	//float d = fCurvature * max(dot(fNormal, unitToLight), 0);
 	float d = max(dot(fNormal, unitToLight), 0);
+	//float d = fCurvature;
+
+	// Determine which level this diffuse factor is in.
+	d = ceil(d * levels) * scaleFactor;
+
 	vec3 diffuse = uDiffuse * d * vec3(0.0, 1.0, 0.0);
-
-	// Specular:
-	float s = 0;
-	if (dot(fNormal, unitToLight) > 0)
-	{
-		vec3 ref = normalize(reflect(unitToLight, fNormal));
-		s = pow(max(dot(unitToEye, ref), 0), uShininess);
-	}
-	vec3 specular = uSpecular * s * uSpecularColor;
-
-	color = vec4(ambient + diffuse + specular, 1);
+	color = vec4(diffuse, 1);
 };

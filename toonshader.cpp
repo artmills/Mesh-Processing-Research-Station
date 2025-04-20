@@ -37,6 +37,10 @@ void ToonShader::GetAllUniformLocations()
 
 	locationLightPosition = GetUniformLocation("uLightPosition");
 	locationEyePosition = GetUniformLocation("uEyePosition");
+
+	// Texture buffer object:
+	locationCurvatureData = GetUniformLocation("uCurvatureData");
+	glUniform1i(locationCurvatureData, 1);
 }
 
 // only need one matrix: modelViewProjection = model * view * projection.

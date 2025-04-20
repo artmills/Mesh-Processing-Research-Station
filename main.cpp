@@ -118,6 +118,9 @@ void LoadMeshFromFile(std::string fileName, int subdivisions, std::vector<Curvat
 void LoadMeshFromFile(std::string fileName, int subdivisions, int meshIndex, glm::vec3 color);
 void LoadUniformSphereMesh(float length, uint numPointsPerSide, int meshIndex);
 std::string ToString(Curvature c);
+void SetFloatTBO(std::vector<float>& data);
+Statistics ComputeStatistics(std::vector<double>& data);
+double LinearInterpolate(double min, double max, double value);
 
 
 /*********************************************************************************/
@@ -176,11 +179,17 @@ const float AMBIENT = 1.0f;
 const float DIFFUSE = 0.0f;
 const float SPECULAR = 0.0f;
 */
+const float AMBIENT = 0.0f;
+const float DIFFUSE = 1.0f;
+const float SPECULAR = 0.0f;
 
+/*
 const float AMBIENT = 0.6f;
 const float DIFFUSE = 0.3f;
 const float SPECULAR = 1 - AMBIENT - DIFFUSE;
+*/
 const float SHININESS = 10.0f;
+
 float ambient = AMBIENT;
 float diffuse = DIFFUSE;
 float specular = SPECULAR;
@@ -189,6 +198,7 @@ glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 
 // Rendering effects:
 bool enableWireframe = false;
+GLuint curvatureTBO = 0;
 
 // Animation:
 bool animate = true;
@@ -344,6 +354,48 @@ std::string ToString(Curvature c)
 			break;
 	}
 	return s;
+}
+
+double LinearInterpolate(double min, double max, double value)
+{
+	if (min == max)
+		return 0.0;
+	return (value - min) / (max - min);
+}
+
+Statistics ComputeStatistics(std::vector<double>& data)
+{
+	if (data.empty())
+		return Statistics();
+
+	double min = data[0];
+	double max = data[0];
+	double sum = 0.0;
+
+	for (double d : data)
+	{
+		if (d < min)
+			min = d;
+		if (d > max)
+			max = d;
+		sum += d;
+	}
+	double mean = sum / data.size();
+	return Statistics(min, max, mean);
+}
+
+void SetFloatTBO(std::vector<float>& data)
+{
+	// Create buffer.
+	GLuint curvatureBuffer;
+	glGenBuffers(1, &curvatureBuffer);
+	glBindBuffer(GL_TEXTURE_BUFFER, curvatureBuffer);
+	glBufferData(GL_TEXTURE_BUFFER, data.size() * sizeof(float), data.data(), GL_STATIC_DRAW);
+
+	// Create and attach TBO.
+	glGenTextures(1, &curvatureTBO);
+	glBindTexture(GL_TEXTURE_BUFFER, curvatureTBO);
+	glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, curvatureBuffer);
 }
 
 Polyhedron* SubdivideMesh(Polyhedron* p, int n)
@@ -527,7 +579,7 @@ void InitLists()
 	curvatures.push_back(Curvature::GAUSSIAN);
 	curvatures.push_back(Curvature::ORIGINAL);
 	curvatures.push_back(Curvature::DIFFERENCE);
-	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
+	LoadMeshFromFile("./tempmodels/happy.ply", 1, curvatures);
 	curvatureList = curvatures;
 
 	//LoadMeshFromFile("./tempmodels/dragon.ply", 1, 0, glm::vec3(0.0f, 1.0f, 1.0f));
@@ -568,6 +620,21 @@ void InitLists()
 
 	// Load sphere for Gauss map visualization.
 	LoadMeshFromFile("./tempmodels/sphere.ply", 0, 5, glm::vec3(0, 0.9f, 0.8f));
+
+	// Prepare TBO for toon shader.
+	// Note that the texture would need to be rebound anytime the shaders are switched.
+	// Later do this more intelligently with a function that switches shaders!!!
+	std::vector<double> curvaturesDouble = MeshAnalysis::GetVertexCurvatures(poly, Curvature::DISTORTION_SIGNED);
+	std::vector<float> data(curvaturesDouble.size());
+	Statistics stats = ComputeStatistics(curvaturesDouble);
+	for (int i = 0; i < curvaturesDouble.size(); ++i)
+	{
+		data[i] = (float)LinearInterpolate(stats.min, stats.max, curvaturesDouble[i]);
+	}
+	std::cout << stats.min << " " << stats.max << " " << stats.mean << std::endl;
+	SetFloatTBO(data);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_BUFFER, curvatureTBO);
 }
 
 
@@ -905,6 +972,14 @@ void Keyboard(unsigned char c, int x, int y)
 			if (!lockCamera)
 				camera.roll += 0.2f;
 			break;
+
+		// Rotate light position to be the same as the rotation of the mesh.
+		case 'l':
+			{
+				glm::vec4 lightTransformed = perspectiveMatrix * viewMatrix * glm::vec4(lightPosition, 1.0f);
+				lightPosition = glm::vec3(lightTransformed);
+				break;
+			}
 
 		// Mesh selection.
 		case '1':

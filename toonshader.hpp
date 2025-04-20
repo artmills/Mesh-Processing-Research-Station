@@ -21,11 +21,10 @@
  * 1) mat4 uProjectionMatrix
  * 2) mat4 uViewMatrix
  * 3) mat4 uTransformMatrix
- * 4) float uAmbient, uDiffuse, uSpecular
- * 5) float uShininess
- * 6) float uSpecularColor
- * 7) vec3 uLightPosition
- * 8) vec3 uEyePosition
+ * 4) float uDiffuse
+ * 5) vec3 uLightPosition
+ * 6) vec3 uEyePosition
+ * 7) samplerBuffer uCurvatureData
  */
 class ToonShader : public ShaderProgram
 {
@@ -76,6 +75,7 @@ private:
 	uint locationSpecularColor;
 	uint locationLightPosition;
 	uint locationEyePosition;
+	uint locationCurvatureData;
 
 	/** Debug print method. This really shouldn't be here. */
 	void PrintRowMajor(glm::mat4& matrix);

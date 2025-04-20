@@ -23,3 +23,14 @@ enum class Curvature
 	PRINCIPAL_DEVIATION = 12,
 	DIFFERENCE = 13
 };
+
+// Statistics:
+struct Statistics {
+	double min;
+	double max;
+	double mean;
+
+	Statistics() : min(0.0), max(0.0), mean(0.0) {}
+	Statistics(double _min, double _max, double _mean) 
+		: min(_min), max(_max), mean(_mean) {}
+};
