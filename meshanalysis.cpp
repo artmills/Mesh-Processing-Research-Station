@@ -595,6 +595,7 @@ std::vector<Triangle*> MeshAnalysis::GetVertexStar(Vert* v)
 double MeshAnalysis::ComputeDifference(Corner& c)
 {
 	double distortion = ComputeSignedDistortion(c) / ComputeMixedPerimeter(c);
+	//double distortion = ComputeDistortion(c) / ComputeMixedPerimeter(c);
 	double mean = ComputeSignedMeanCurvature(c);
 
 	return std::abs((double)mean - (double)distortion);

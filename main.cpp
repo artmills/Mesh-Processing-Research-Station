@@ -32,6 +32,8 @@
 #include "spherical.hpp"
 #include "curvecomponent.hpp"
 #include "lineshader.hpp"
+#include "toonsilhouette.hpp"
+#include "toonshader.hpp"
 
 
 
@@ -147,6 +149,10 @@ Polyhedron* poly;
 BasicShader shader;
 LineShader lineShader;
 
+// Toon Shaders:
+ToonSilhouette tsShader;
+ToonShader tShader;
+
 // Perspective:
 glm::mat4 perspectiveMatrix;
 glm::mat4 lightPerspectiveMatrix;
@@ -165,15 +171,15 @@ Camera camera;
 GLuint textureHandle;
 
 // Lighting:
+/*
 const float AMBIENT = 1.0f;
 const float DIFFUSE = 0.0f;
 const float SPECULAR = 0.0f;
+*/
 
-/*
 const float AMBIENT = 0.6f;
 const float DIFFUSE = 0.3f;
 const float SPECULAR = 1 - AMBIENT - DIFFUSE;
-*/
 const float SHININESS = 10.0f;
 float ambient = AMBIENT;
 float diffuse = DIFFUSE;
@@ -495,6 +501,12 @@ void InitLists()
 	lineShader = LineShader();
 	lineShader.Initialize();
 
+	tsShader = ToonSilhouette();
+	tsShader.Initialize();
+
+	tShader = ToonShader();
+	tShader.Initialize();
+
 	// Mouse picker:
 	mousePicker = MousePicker(windowWidth, windowHeight, perspectiveMatrix);
 
@@ -515,7 +527,7 @@ void InitLists()
 	curvatures.push_back(Curvature::GAUSSIAN);
 	curvatures.push_back(Curvature::ORIGINAL);
 	curvatures.push_back(Curvature::DIFFERENCE);
-	LoadMeshFromFile("./tempmodels/bunny.ply", 2, curvatures);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
 	curvatureList = curvatures;
 
 	//LoadMeshFromFile("./tempmodels/dragon.ply", 1, 0, glm::vec3(0.0f, 1.0f, 1.0f));
@@ -570,6 +582,11 @@ void Display()
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
+	// Face culling.
+	// Remove this if you want to be able to fly into a closed mesh and see the inisde.
+	glEnable(GL_CULL_FACE);
+	glCullFace(GL_FRONT);
+
 	// Line rendering settings.
 	glEnable(GL_LINE_SMOOTH);
 
@@ -597,8 +614,52 @@ void Display()
 	// Render meshes.
 	if (activeMesh >= 0 && activeMesh < meshList.size())
 	{
-		shader.Start();
 		std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
+
+		// Toon silhouette shader:
+		glCullFace(GL_BACK);
+		tsShader.Start();
+		for (int i = 0; i < activeMeshList.size(); ++i)
+		{
+			glBindVertexArray(activeMeshList[i].getVAO());
+
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(2);
+
+			tsShader.LoadProjectionMatrix(perspectiveMatrix);
+			tsShader.LoadViewMatrix(viewMatrix);
+			tsShader.LoadTransformMatrix(activeMeshList[i].transform);
+			float uTranslate = 0.008f;
+			//float uTranslate = 0.020f;
+			tsShader.LoadTranslate(uTranslate);
+			
+			// Draw calls:
+			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+		}
+		tsShader.Stop();
+
+		// Set face culling back to normal.
+		glCullFace(GL_FRONT);
+
+		tShader.Start();
+		for (int i = 0; i < activeMeshList.size(); ++i)
+		{
+			glBindVertexArray(activeMeshList[i].getVAO());
+
+			glEnableVertexAttribArray(0);
+			glEnableVertexAttribArray(2);
+
+			tShader.LoadProjectionMatrix(perspectiveMatrix);
+			tShader.LoadViewMatrix(viewMatrix);
+			tShader.LoadTransformMatrix(activeMeshList[i].transform);
+			tShader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
+			
+			// Draw calls:
+			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+		}
+		tShader.Stop();
+		/*
+		shader.Start();
 		for (int i = 0; i < activeMeshList.size(); ++i)
 		{
 			glBindVertexArray(activeMeshList[i].getVAO());
@@ -621,6 +682,7 @@ void Display()
 			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
 		}
 		shader.Stop();
+		*/
 	}
 		
 	// Render Gauss map.
