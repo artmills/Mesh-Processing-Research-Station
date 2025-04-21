@@ -31,3 +31,5 @@ Future features (unrelated to my research):
 * Save current mesh data, such as after subdivision
 * Display multiple meshes at once
 * More robust camera movement
+
+![Screenshot_select-area_20250406153729](https://github.com/user-attachments/assets/973b7cdb-817b-4d5c-8cbb-9ed65d3ee88e)
