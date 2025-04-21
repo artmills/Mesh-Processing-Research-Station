@@ -16,6 +16,7 @@ struct View
 public:
 
 	View();
+	View(glm::dvec3 position, glm::dvec3 target, Polyhedron* poly);
 	~View();
 
 	glm::dvec3 getViewDirection();

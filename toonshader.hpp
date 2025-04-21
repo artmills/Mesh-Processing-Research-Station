@@ -25,6 +25,7 @@
  * 5) vec3 uLightPosition
  * 6) vec3 uEyePosition
  * 7) samplerBuffer uCurvatureData
+ * 8) uint uLevels
  */
 class ToonShader : public ShaderProgram
 {
@@ -55,6 +56,8 @@ public:
 					  glm::vec3 lightPosition,
 					  glm::vec3 eyePosition);
 
+	/** Load toon shading parameters. */
+	void LoadToonShading(int levels);
 
 private:
 
@@ -75,7 +78,10 @@ private:
 	uint locationSpecularColor;
 	uint locationLightPosition;
 	uint locationEyePosition;
+
+	/** ID of toon shading data. */
 	uint locationCurvatureData;
+	uint locationLevels;
 
 	/** Debug print method. This really shouldn't be here. */
 	void PrintRowMajor(glm::mat4& matrix);

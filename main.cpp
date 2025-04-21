@@ -34,7 +34,8 @@
 #include "lineshader.hpp"
 #include "toonsilhouette.hpp"
 #include "toonshader.hpp"
-
+#include "silhouette.hpp"
+#include "view.hpp"
 
 
 
@@ -139,6 +140,7 @@ CurveComponent dualCurve;
 CurveComponent maxPrincipalDirections;
 CurveComponent minPrincipalDirections;
 uint renderMaxMinPrincipalDirection = 0;
+//CurveComponent silhouette;
 
 // Mesh selection:
 std::vector<std::vector<MeshComponent>> meshList;
@@ -155,6 +157,9 @@ LineShader lineShader;
 // Toon Shaders:
 ToonSilhouette tsShader;
 ToonShader tShader;
+bool toon = true;
+int toonLevels = 8;
+float toonBoundarySize = 0.008f;
 
 // Perspective:
 glm::mat4 perspectiveMatrix;
@@ -360,7 +365,7 @@ double LinearInterpolate(double min, double max, double value)
 {
 	if (min == max)
 		return 0.0;
-	return (value - min) / (max - min);
+	return std::clamp((value - min) / (max - min), 0.0, 1.0);
 }
 
 Statistics ComputeStatistics(std::vector<double>& data)
@@ -576,10 +581,10 @@ void InitLists()
 
 	std::vector<Curvature> curvatures;
 	curvatures.push_back(Curvature::MEAN_SIGNED);
-	curvatures.push_back(Curvature::GAUSSIAN);
+	curvatures.push_back(Curvature::DISTORTION_SIGNED);
 	curvatures.push_back(Curvature::ORIGINAL);
 	curvatures.push_back(Curvature::DIFFERENCE);
-	LoadMeshFromFile("./tempmodels/happy.ply", 1, curvatures);
+	LoadMeshFromFile("./tempmodels/bunny.ply", 0, curvatures);
 	curvatureList = curvatures;
 
 	//LoadMeshFromFile("./tempmodels/dragon.ply", 1, 0, glm::vec3(0.0f, 1.0f, 1.0f));
@@ -587,6 +592,7 @@ void InitLists()
 
 	std::cout << "Computed curvatures. " << std::endl;
 
+	// Lines of curvature.
 	std::vector<Edge*> principals = MeshAnalysis::GetPrincipalDirections(poly);
 	std::vector<LineVertex> maxPrincipals;
 	std::vector<LineVertex> minPrincipals;
@@ -612,6 +618,21 @@ void InitLists()
 	Loader::PrepareCurve(maxPrincipalDirections);
 	Loader::PrepareCurve(minPrincipalDirections);
 
+	// Silhouette.
+	/*
+	View view(camera.position, poly->center, poly);
+	std::vector<glm::dvec3> silhouettePoints = Silhouette::GetSilhouetteEdgesFromVertices(view);
+	std::vector<LineVertex> silhouetteVertices;
+	silhouetteVertices.reserve(silhouettePoints.size());
+	for (glm::dvec3& v : silhouettePoints)
+	{
+		silhouetteVertices.push_back(LineVertex(v, glm::vec3(0.0, 0.0, 0.0)));
+	}
+	silhouette = CurveComponent(silhouetteVertices);
+	Loader::PrepareCurve(silhouette);
+	*/
+	
+
 	// Load blank copy of mesh.
 	MeshComponent blank = MeshComponent(poly, glm::vec3(0.9f, 0.9f, 0.9f));
 	Loader::PrepareMesh(blank);
@@ -624,12 +645,18 @@ void InitLists()
 	// Prepare TBO for toon shader.
 	// Note that the texture would need to be rebound anytime the shaders are switched.
 	// Later do this more intelligently with a function that switches shaders!!!
-	std::vector<double> curvaturesDouble = MeshAnalysis::GetVertexCurvatures(poly, Curvature::DISTORTION_SIGNED);
+	std::vector<double> curvaturesDouble = MeshAnalysis::GetVertexCurvatures(poly, Curvature::FALSE_MEAN);
 	std::vector<float> data(curvaturesDouble.size());
 	Statistics stats = ComputeStatistics(curvaturesDouble);
 	for (int i = 0; i < curvaturesDouble.size(); ++i)
 	{
 		data[i] = (float)LinearInterpolate(stats.min, stats.max, curvaturesDouble[i]);
+		/*
+		if (curvaturesDouble[i] > 0)
+			data[i] = 1.0f;
+		else
+			data[i] = (float)LinearInterpolate(stats.min, 0.0, curvaturesDouble[i]);
+		*/
 	}
 	std::cout << stats.min << " " << stats.max << " " << stats.mean << std::endl;
 	SetFloatTBO(data);
@@ -684,72 +711,90 @@ void Display()
 		std::vector<MeshComponent>& activeMeshList = meshList[activeMesh];
 
 		// Toon silhouette shader:
-		glCullFace(GL_BACK);
-		tsShader.Start();
-		for (int i = 0; i < activeMeshList.size(); ++i)
+		if (toon)
 		{
-			glBindVertexArray(activeMeshList[i].getVAO());
+			glCullFace(GL_BACK);
+			tsShader.Start();
+			for (int i = 0; i < activeMeshList.size(); ++i)
+			{
+				glBindVertexArray(activeMeshList[i].getVAO());
 
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(2);
+				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(2);
 
-			tsShader.LoadProjectionMatrix(perspectiveMatrix);
-			tsShader.LoadViewMatrix(viewMatrix);
-			tsShader.LoadTransformMatrix(activeMeshList[i].transform);
-			float uTranslate = 0.008f;
-			//float uTranslate = 0.020f;
-			tsShader.LoadTranslate(uTranslate);
-			
-			// Draw calls:
-			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+				tsShader.LoadProjectionMatrix(perspectiveMatrix);
+				tsShader.LoadViewMatrix(viewMatrix);
+				tsShader.LoadTransformMatrix(activeMeshList[i].transform);
+				tsShader.LoadTranslate(toonBoundarySize);
+				
+				// Draw calls:
+				glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+			}
+			tsShader.Stop();
+
+			// Set face culling back to normal.
+			glCullFace(GL_FRONT);
+
+			tShader.Start();
+			for (int i = 0; i < activeMeshList.size(); ++i)
+			{
+				glBindVertexArray(activeMeshList[i].getVAO());
+
+				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(2);
+
+				tShader.LoadProjectionMatrix(perspectiveMatrix);
+				tShader.LoadViewMatrix(viewMatrix);
+				tShader.LoadTransformMatrix(activeMeshList[i].transform);
+				tShader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
+				tShader.LoadToonShading(toonLevels);
+				
+				// Draw calls:
+				glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+			}
+			tShader.Stop();
 		}
-		tsShader.Stop();
-
-		// Set face culling back to normal.
-		glCullFace(GL_FRONT);
-
-		tShader.Start();
-		for (int i = 0; i < activeMeshList.size(); ++i)
+		else
 		{
-			glBindVertexArray(activeMeshList[i].getVAO());
+			shader.Start();
+			for (int i = 0; i < activeMeshList.size(); ++i)
+			{
+				glBindVertexArray(activeMeshList[i].getVAO());
 
-			glEnableVertexAttribArray(0);
-			glEnableVertexAttribArray(2);
+				glEnableVertexAttribArray(0);
+				glEnableVertexAttribArray(1);
+				glEnableVertexAttribArray(2);
+				glEnableVertexAttribArray(3);
+				glEnableVertexAttribArray(4);
+				glEnableVertexAttribArray(5);
 
-			tShader.LoadProjectionMatrix(perspectiveMatrix);
-			tShader.LoadViewMatrix(viewMatrix);
-			tShader.LoadTransformMatrix(activeMeshList[i].transform);
-			tShader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
-			
-			// Draw calls:
-			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
-		}
-		tShader.Stop();
-		/*
-		shader.Start();
-		for (int i = 0; i < activeMeshList.size(); ++i)
-		{
-			glBindVertexArray(activeMeshList[i].getVAO());
+				shader.LoadProjectionMatrix(perspectiveMatrix);
+				shader.LoadViewMatrix(viewMatrix);
+				shader.LoadTransformMatrix(activeMeshList[i].transform);
+				shader.LoadLighting(1.0f, 0.0f, 0.0f, shininess, lightColor, lightPosition, camera.position);
+				//shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
+				shader.LoadTexture(3);
+				shader.LoadWireframe(enableWireframe);
+				
+				// Draw calls:
+				glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+			}
+			shader.Stop();
 
+			// Render silhouette.
+			/*
+			glLineWidth((GLfloat)8.0);
+			lineShader.Start();
+			glBindVertexArray(silhouette.getVAO());
 			glEnableVertexAttribArray(0);
 			glEnableVertexAttribArray(1);
-			glEnableVertexAttribArray(2);
-			glEnableVertexAttribArray(3);
-			glEnableVertexAttribArray(4);
-			glEnableVertexAttribArray(5);
-
-			shader.LoadProjectionMatrix(perspectiveMatrix);
-			shader.LoadViewMatrix(viewMatrix);
-			shader.LoadTransformMatrix(activeMeshList[i].transform);
-			shader.LoadLighting(ambient, diffuse, specular, shininess, lightColor, lightPosition, camera.position);
-			shader.LoadTexture(3);
-			shader.LoadWireframe(enableWireframe);
-			
-			// Draw calls:
-			glDrawElements(GL_TRIANGLES, activeMeshList[i].getCount(), GL_UNSIGNED_INT, nullptr);
+			lineShader.LoadProjectionMatrix(perspectiveMatrix);
+			lineShader.LoadViewMatrix(viewMatrix);
+			lineShader.LoadTransformMatrix(silhouette.transform);
+			glDrawArrays(GL_LINES, 0, silhouette.getCount());
+			lineShader.Stop();
+			*/
 		}
-		shader.Stop();
-		*/
 	}
 		
 	// Render Gauss map.
@@ -897,6 +942,20 @@ void DoWireframeMenu(int id)
 	enableWireframe = id;
 }
 
+void DoToonBoundaryMenu(int id)
+{
+	float change = (float)id * 0.005f;
+	if (toonBoundarySize + change >= 0)
+		toonBoundarySize += change;
+	std::cout << "Toon shading silhouette boundary size is now " << toonBoundarySize << std::endl;
+}
+void DoToonLevelsMenu(int id)
+{
+	if (toonLevels + id > 0)
+		toonLevels += id;
+	std::cout << "Toon shading number of levels is now " << toonLevels << std::endl;
+}
+
 void DoLinesOfCurvatureMenu(int id)
 {
 	renderMaxMinPrincipalDirection = id;
@@ -916,9 +975,19 @@ void InitMenus()
 	glutAddMenuEntry("Enable", 1);
 	glutAddMenuEntry("Disable", 0);
 
+	int toonBoundaryMenu = glutCreateMenu(DoToonBoundaryMenu);
+	glutAddMenuEntry("Increase", 1);
+	glutAddMenuEntry("Decrease", -1);
+
+	int toonLevelsMenu = glutCreateMenu(DoToonLevelsMenu);
+	glutAddMenuEntry("Increase", 1);
+	glutAddMenuEntry("Decrease", -1);
+
 	int mainmenu = glutCreateMenu(DoMainMenu);
 	glutAddSubMenu("Lines of Curvature", linesOfCurvatureMenu);
 	glutAddSubMenu("Wireframe", wireframeMenu);
+	glutAddSubMenu("Toon Boundary Size", toonBoundaryMenu);
+	glutAddSubMenu("Toon Levels", toonLevelsMenu);
 	glutAddMenuEntry("Reset", 0);
 	glutAddMenuEntry("Quit", 1);
 
@@ -981,6 +1050,10 @@ void Keyboard(unsigned char c, int x, int y)
 				break;
 			}
 
+		case 'v':
+			toon = !toon;
+			break;
+
 		// Mesh selection.
 		case '1':
 			activeMesh = 0;
@@ -1040,22 +1113,6 @@ void Keyboard(unsigned char c, int x, int y)
 		case 'q':
 			DoMainMenu(1);	// will not return here
 			break;				// happy compiler
-
-		case 'm':
-			renderMaxMinPrincipalDirection = 1;
-			break;
-
-		case 'n':
-			renderMaxMinPrincipalDirection = 2;
-			break;
-
-		case 'b':
-			renderMaxMinPrincipalDirection = 3;
-			break;
-
-		case 'v':
-			renderMaxMinPrincipalDirection = 0;
-			break;
 
 		// Triangle select tool.
 		case 't':

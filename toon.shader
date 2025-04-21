@@ -42,8 +42,8 @@ in float fCurvature;
 
 uniform float uDiffuse;
 
-int levels = 8;
-float scaleFactor = 1.0 / levels;
+uniform int uLevels;
+float scaleFactor = 1.0 / uLevels;
 
 out vec4 color;
 
@@ -56,11 +56,11 @@ void main()
 
 	// Diffuse:
 	//float d = fCurvature * max(dot(fNormal, unitToLight), 0);
-	float d = max(dot(fNormal, unitToLight), 0);
-	//float d = fCurvature;
+	//float d = max(dot(fNormal, unitToLight), 0);
+	float d = fCurvature;
 
 	// Determine which level this diffuse factor is in.
-	d = ceil(d * levels) * scaleFactor;
+	d = ceil(d * uLevels) * scaleFactor;
 
 	vec3 diffuse = uDiffuse * d * vec3(0.0, 1.0, 0.0);
 	color = vec4(diffuse, 1);

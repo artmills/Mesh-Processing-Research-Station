@@ -3,7 +3,7 @@ CXXFLAGS=-std=c++17 -g
 
 OBJDIR=obj
 
-SOURCES=main.cpp vertex.cpp meshcomponent.cpp loader.cpp shaderprogram.cpp basicshader.cpp perlinnoise.cpp geometry.cpp polyhedron.cpp meshanalysis.cpp subdivision.cpp view.cpp meshfactory.cpp mousepicker.cpp camera.cpp spherical.cpp linevertex.cpp curvecomponent.cpp lineshader.cpp toonsilhouette.cpp toonshader.cpp
+SOURCES=main.cpp vertex.cpp meshcomponent.cpp loader.cpp shaderprogram.cpp basicshader.cpp perlinnoise.cpp geometry.cpp polyhedron.cpp meshanalysis.cpp subdivision.cpp view.cpp meshfactory.cpp mousepicker.cpp camera.cpp spherical.cpp linevertex.cpp curvecomponent.cpp lineshader.cpp toonsilhouette.cpp toonshader.cpp silhouette.cpp 
 
 OBJECTS=$(patsubst %.cpp,$(OBJDIR)/%.o,$(SOURCES))
 #LLIBS=$(shell pkg-config --cflags --libs libglut)
