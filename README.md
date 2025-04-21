@@ -18,10 +18,11 @@ Current Mesh Processing Research Station features:
 * Display lines of curvature computed using my own curvature measures
 * Gauss map visualization, including the polar dual of the Gauss map of a vertex star
 * Procedural terrain generation using a Perlin noise implementation
+* Computation of the silhouette of a mesh from a given viewing direction
+* Toon shading algorithm, including GPU-based silhouette computation
 
 Previous features that need to be updated and re-added (some are still accessible in previous commits):
 * Smoothing using mean curvature flow (and other curvature flows)
-* Silhouette and line art rendering
 * Morse function computation
 * Visualization analysis using depth peeling
 
